@@ -9,3 +9,23 @@ project(
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_executable(
+    redis-server
+    src/main.cpp
+    src/net/tcp_server.cpp
+)
+
+target_include_directories(
+    redis-server
+    PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+)
+
+target_compile_options(
+    redis-server
+    PRIVATE
+    -Wall
+    -Wextra
+    -Wpedantic
+)

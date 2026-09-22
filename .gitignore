@@ -1,0 +1,75 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+
+# Compiled objects and binaries
+*.o
+*.obj
+*.a
+*.so
+*.so.*
+*.dll
+*.dylib
+*.exe
+*.out
+
+# Debug and profiling artifacts
+*.dSYM/
+*.gcda
+*.gcno
+*.gcov
+gmon.out
+
+# Runtime files
+*.log
+*.pid
+*.tmp
+*.temp
+
+# Redis persistence/runtime artifacts
+*.rdb
+*.aof
+
+# Core dumps
+core
+core.*
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# JetBrains IDEs
+.idea/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# Package manager / dependency build artifacts
+_deps/
+
+# Test and benchmark output
+Testing/
+benchmark_results/
+coverage/
+
+# Generated documentation
+docs/generated/

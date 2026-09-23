@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cstdint>
-#include <string>
 
 namespace redis::net {
 
@@ -24,10 +23,27 @@ private:
     void configureSocket();
     void bindSocket();
     void listenForConnections();
-    void acceptClient();
+
+    void createEpollInstance();
+    void registerServerSocket();
+    void runEventLoop();
+
+    void handleNewConnection();
+    void handleClientEvent(
+        int client_fd,
+        std::uint32_t events
+    );
+
+    void addToEpoll(
+        int fd,
+        std::uint32_t events
+    );
+
+    void removeClient(int client_fd);
 
     std::uint16_t port_;
     int server_fd_;
+    int epoll_fd_;
 };
 
-}
+}  // namespace redis::net

@@ -5,8 +5,10 @@
 #include <cstddef>
 #include <cstring>
 #include <iostream>
+#include <memory>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <sys/epoll.h>
 #include <sys/socket.h>
 #include <unistd.h>
@@ -18,7 +20,7 @@ namespace {
 constexpr int kInvalidFileDescriptor = -1;
 constexpr int kListenBacklog = 128;
 constexpr int kMaxEvents = 64;
-constexpr std::size_t kBufferSize = 4096;
+constexpr std::size_t kReadBufferSize = 4096;
 
 std::runtime_error makeSystemError(const std::string& operation) {
     return std::runtime_error(
@@ -31,10 +33,13 @@ std::runtime_error makeSystemError(const std::string& operation) {
 TcpServer::TcpServer(std::uint16_t port)
     : port_(port),
       server_fd_(kInvalidFileDescriptor),
-      epoll_fd_(kInvalidFileDescriptor) {
+      epoll_fd_(kInvalidFileDescriptor),
+      connections_() {
 }
 
 TcpServer::~TcpServer() {
+    connections_.clear();
+
     if (epoll_fd_ != kInvalidFileDescriptor) {
         ::close(epoll_fd_);
     }
@@ -63,7 +68,7 @@ void TcpServer::start() {
 void TcpServer::createSocket() {
     server_fd_ = ::socket(
         AF_INET,
-        SOCK_STREAM | SOCK_NONBLOCK,
+        SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
         0
     );
 
@@ -153,6 +158,7 @@ void TcpServer::runEventLoop() {
 
         for (int index = 0; index < ready_count; ++index) {
             const int ready_fd = events[index].data.fd;
+
             const std::uint32_t event_flags =
                 events[index].events;
 
@@ -172,6 +178,7 @@ void TcpServer::runEventLoop() {
 void TcpServer::handleNewConnection() {
     while (true) {
         sockaddr_in client_address{};
+
         socklen_t client_address_length =
             sizeof(client_address);
 
@@ -183,7 +190,10 @@ void TcpServer::handleNewConnection() {
         );
 
         if (client_fd == kInvalidFileDescriptor) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (
+                errno == EAGAIN ||
+                errno == EWOULDBLOCK
+            ) {
                 return;
             }
 
@@ -208,10 +218,23 @@ void TcpServer::handleNewConnection() {
             throw makeSystemError("inet_ntop");
         }
 
-        addToEpoll(
+        std::unique_ptr<Connection> connection =
+            std::make_unique<Connection>(client_fd);
+
+        connections_.emplace(
             client_fd,
-            EPOLLIN | EPOLLRDHUP
+            std::move(connection)
         );
+
+        try {
+            addToEpoll(
+                client_fd,
+                EPOLLIN | EPOLLRDHUP
+            );
+        } catch (...) {
+            connections_.erase(client_fd);
+            throw;
+        }
 
         std::cout << "Client connected from "
                   << client_ip
@@ -227,6 +250,16 @@ void TcpServer::handleClientEvent(
     int client_fd,
     std::uint32_t events
 ) {
+    const auto connection_iterator =
+        connections_.find(client_fd);
+
+    if (connection_iterator == connections_.end()) {
+        return;
+    }
+
+    Connection& connection =
+        *connection_iterator->second;
+
     if ((events & EPOLLERR) != 0U) {
         std::cerr << "Socket error on fd "
                   << client_fd
@@ -241,99 +274,197 @@ void TcpServer::handleClientEvent(
         (events & EPOLLHUP) != 0U;
 
     if ((events & EPOLLIN) != 0U) {
-        char buffer[kBufferSize]{};
+        const bool connection_alive =
+            readFromClient(connection);
 
-        while (true) {
-            const ssize_t bytes_read = ::recv(
-                client_fd,
-                buffer,
-                sizeof(buffer),
-                0
-            );
+        if (!connection_alive) {
+            removeClient(client_fd);
+            return;
+        }
+    }
 
-            if (bytes_read > 0) {
-                std::cout << "Received "
-                          << bytes_read
-                          << " bytes from fd "
-                          << client_fd
-                          << std::endl;
+    if ((events & EPOLLOUT) != 0U) {
+        const bool connection_alive =
+            writeToClient(connection);
 
-                std::size_t total_bytes_sent = 0;
-
-                while (
-                    total_bytes_sent <
-                    static_cast<std::size_t>(bytes_read)
-                ) {
-                    const ssize_t bytes_sent = ::send(
-                        client_fd,
-                        buffer + total_bytes_sent,
-                        static_cast<std::size_t>(bytes_read) -
-                            total_bytes_sent,
-                        MSG_NOSIGNAL
-                    );
-
-                    if (bytes_sent > 0) {
-                        total_bytes_sent +=
-                            static_cast<std::size_t>(
-                                bytes_sent
-                            );
-
-                        continue;
-                    }
-
-                    if (
-                        bytes_sent == -1 &&
-                        errno == EINTR
-                    ) {
-                        continue;
-                    }
-
-                    if (
-                        bytes_sent == -1 &&
-                        (
-                            errno == EAGAIN ||
-                            errno == EWOULDBLOCK
-                        )
-                    ) {
-                        std::cerr
-                            << "Socket send buffer is full for fd "
-                            << client_fd
-                            << std::endl;
-
-                        removeClient(client_fd);
-                        return;
-                    }
-
-                    removeClient(client_fd);
-                    return;
-                }
-
-                continue;
-            }
-
-            if (bytes_read == 0) {
-                removeClient(client_fd);
-                return;
-            }
-
-            if (errno == EINTR) {
-                continue;
-            }
-
-            if (
-                errno == EAGAIN ||
-                errno == EWOULDBLOCK
-            ) {
-                break;
-            }
-
+        if (!connection_alive) {
             removeClient(client_fd);
             return;
         }
     }
 
     if (peer_closed) {
-        removeClient(client_fd);
+        if (connection.hasPendingOutput()) {
+            const bool connection_alive =
+                writeToClient(connection);
+
+            if (!connection_alive) {
+                removeClient(client_fd);
+                return;
+            }
+        }
+
+        if (!connection.hasPendingOutput()) {
+            removeClient(client_fd);
+        }
+    }
+}
+
+bool TcpServer::readFromClient(
+    Connection& connection
+) {
+    char buffer[kReadBufferSize]{};
+
+    bool peer_reached_eof = false;
+
+    while (true) {
+        const ssize_t bytes_read = ::recv(
+            connection.fd(),
+            buffer,
+            sizeof(buffer),
+            0
+        );
+
+        if (bytes_read > 0) {
+            const std::size_t bytes_received =
+                static_cast<std::size_t>(bytes_read);
+
+            connection.appendInput(
+                buffer,
+                bytes_received
+            );
+
+            std::cout << "Received "
+                      << bytes_received
+                      << " bytes from fd "
+                      << connection.fd()
+                      << std::endl;
+
+            connection.appendOutput(
+                std::string_view(
+                    buffer,
+                    bytes_received
+                )
+            );
+
+            continue;
+        }
+
+        if (bytes_read == 0) {
+            peer_reached_eof = true;
+            break;
+        }
+
+        if (errno == EINTR) {
+            continue;
+        }
+
+        if (
+            errno == EAGAIN ||
+            errno == EWOULDBLOCK
+        ) {
+            break;
+        }
+
+        return false;
+    }
+
+    if (connection.hasPendingOutput()) {
+        const bool connection_alive =
+            writeToClient(connection);
+
+        if (!connection_alive) {
+            return false;
+        }
+    }
+
+    connection.clearInput();
+
+    if (
+        peer_reached_eof &&
+        !connection.hasPendingOutput()
+    ) {
+        return false;
+    }
+
+    return true;
+}
+
+bool TcpServer::writeToClient(
+    Connection& connection
+) {
+    while (connection.hasPendingOutput()) {
+        const std::string_view output =
+            connection.pendingOutput();
+
+        const ssize_t bytes_sent = ::send(
+            connection.fd(),
+            output.data(),
+            output.size(),
+            MSG_NOSIGNAL
+        );
+
+        if (bytes_sent > 0) {
+            connection.consumeOutput(
+                static_cast<std::size_t>(bytes_sent)
+            );
+
+            continue;
+        }
+
+        if (
+            bytes_sent == -1 &&
+            errno == EINTR
+        ) {
+            continue;
+        }
+
+        if (
+            bytes_sent == -1 &&
+            (
+                errno == EAGAIN ||
+                errno == EWOULDBLOCK
+            )
+        ) {
+            updateClientEvents(
+                connection.fd(),
+                EPOLLIN |
+                    EPOLLOUT |
+                    EPOLLRDHUP
+            );
+
+            return true;
+        }
+
+        return false;
+    }
+
+    updateClientEvents(
+        connection.fd(),
+        EPOLLIN | EPOLLRDHUP
+    );
+
+    return true;
+}
+
+void TcpServer::updateClientEvents(
+    int client_fd,
+    std::uint32_t events
+) {
+    epoll_event event{};
+
+    event.events = events;
+    event.data.fd = client_fd;
+
+    const int result = ::epoll_ctl(
+        epoll_fd_,
+        EPOLL_CTL_MOD,
+        client_fd,
+        &event
+    );
+
+    if (result == -1) {
+        throw makeSystemError("epoll_ctl modify");
     }
 }
 
@@ -366,7 +497,11 @@ void TcpServer::removeClient(int client_fd) {
         nullptr
     );
 
-    if (result == -1 && errno != ENOENT) {
+    if (
+        result == -1 &&
+        errno != ENOENT &&
+        errno != EBADF
+    ) {
         std::cerr
             << "epoll_ctl delete failed for fd "
             << client_fd
@@ -375,7 +510,7 @@ void TcpServer::removeClient(int client_fd) {
             << std::endl;
     }
 
-    ::close(client_fd);
+    connections_.erase(client_fd);
 
     std::cout << "Client disconnected from fd "
               << client_fd

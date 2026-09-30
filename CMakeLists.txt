@@ -13,6 +13,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 add_executable(
     redis-server
     src/main.cpp
+    src/net/connection.cpp
     src/net/tcp_server.cpp
 )
 

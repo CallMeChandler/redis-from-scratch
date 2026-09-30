@@ -1,6 +1,10 @@
 #pragma once
 
+#include "redis/net/connection.hpp"
+
 #include <cstdint>
+#include <memory>
+#include <unordered_map>
 
 namespace redis::net {
 
@@ -29,7 +33,16 @@ private:
     void runEventLoop();
 
     void handleNewConnection();
+
     void handleClientEvent(
+        int client_fd,
+        std::uint32_t events
+    );
+
+    bool readFromClient(Connection& connection);
+    bool writeToClient(Connection& connection);
+
+    void updateClientEvents(
         int client_fd,
         std::uint32_t events
     );
@@ -44,6 +57,11 @@ private:
     std::uint16_t port_;
     int server_fd_;
     int epoll_fd_;
+
+    std::unordered_map<
+        int,
+        std::unique_ptr<Connection>
+    > connections_;
 };
 
 }  // namespace redis::net

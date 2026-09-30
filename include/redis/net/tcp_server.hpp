@@ -1,6 +1,7 @@
 #pragma once
 
 #include "redis/net/connection.hpp"
+#include "redis/protocol/resp_parser.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -42,6 +43,8 @@ private:
     bool readFromClient(Connection& connection);
     bool writeToClient(Connection& connection);
 
+    bool processInput(Connection& connection);
+
     void updateClientEvents(
         int client_fd,
         std::uint32_t events
@@ -62,6 +65,8 @@ private:
         int,
         std::unique_ptr<Connection>
     > connections_;
+
+    protocol::RespParser resp_parser_;
 };
 
 }  // namespace redis::net

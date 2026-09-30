@@ -64,12 +64,22 @@ const std::string& Connection::inputBuffer() const noexcept {
     return input_buffer_;
 }
 
-void Connection::clearInput() {
-    input_buffer_.clear();
+void Connection::consumeInput(std::size_t bytes) {
+    if (bytes >= input_buffer_.size()) {
+        input_buffer_.clear();
+        return;
+    }
+
+    input_buffer_.erase(0, bytes);
 }
 
-void Connection::appendOutput(std::string_view data) {
-    if (output_offset_ == output_buffer_.size()) {
+void Connection::appendOutput(
+    std::string_view data
+) {
+    if (
+        output_offset_ ==
+        output_buffer_.size()
+    ) {
         output_buffer_.clear();
         output_offset_ = 0;
     }
@@ -84,7 +94,8 @@ bool Connection::hasPendingOutput() const noexcept {
     return output_offset_ < output_buffer_.size();
 }
 
-std::string_view Connection::pendingOutput() const noexcept {
+std::string_view
+Connection::pendingOutput() const noexcept {
     if (!hasPendingOutput()) {
         return {};
     }
@@ -95,10 +106,15 @@ std::string_view Connection::pendingOutput() const noexcept {
     );
 }
 
-void Connection::consumeOutput(std::size_t bytes) {
+void Connection::consumeOutput(
+    std::size_t bytes
+) {
     output_offset_ += bytes;
 
-    if (output_offset_ >= output_buffer_.size()) {
+    if (
+        output_offset_ >=
+        output_buffer_.size()
+    ) {
         output_buffer_.clear();
         output_offset_ = 0;
     }

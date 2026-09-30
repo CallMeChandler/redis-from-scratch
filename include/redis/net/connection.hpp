@@ -18,7 +18,8 @@ public:
     Connection(Connection&& other) noexcept;
     Connection& operator=(Connection&& other) noexcept;
 
-    [[nodiscard]] int fd() const noexcept;
+    [[nodiscard]]
+    int fd() const noexcept;
 
     void appendInput(
         const char* data,
@@ -28,7 +29,7 @@ public:
     [[nodiscard]]
     const std::string& inputBuffer() const noexcept;
 
-    void clearInput();
+    void consumeInput(std::size_t bytes);
 
     void appendOutput(std::string_view data);
 

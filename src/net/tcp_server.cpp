@@ -22,9 +22,12 @@ constexpr int kListenBacklog = 128;
 constexpr int kMaxEvents = 64;
 constexpr std::size_t kReadBufferSize = 4096;
 
-std::runtime_error makeSystemError(const std::string& operation) {
+std::runtime_error makeSystemError(
+    const std::string& operation
+) {
     return std::runtime_error(
-        operation + " failed: " + std::strerror(errno)
+        operation + " failed: " +
+        std::strerror(errno)
     );
 }
 
@@ -34,7 +37,8 @@ TcpServer::TcpServer(std::uint16_t port)
     : port_(port),
       server_fd_(kInvalidFileDescriptor),
       epoll_fd_(kInvalidFileDescriptor),
-      connections_() {
+      connections_(),
+      resp_parser_() {
 }
 
 TcpServer::~TcpServer() {
@@ -58,9 +62,10 @@ void TcpServer::start() {
     createEpollInstance();
     registerServerSocket();
 
-    std::cout << "Redis server listening on port "
-              << port_
-              << std::endl;
+    std::cout
+        << "Redis server listening on port "
+        << port_
+        << std::endl;
 
     runEventLoop();
 }
@@ -68,7 +73,9 @@ void TcpServer::start() {
 void TcpServer::createSocket() {
     server_fd_ = ::socket(
         AF_INET,
-        SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC,
+        SOCK_STREAM |
+            SOCK_NONBLOCK |
+            SOCK_CLOEXEC,
         0
     );
 
@@ -97,12 +104,18 @@ void TcpServer::bindSocket() {
     sockaddr_in server_address{};
 
     server_address.sin_family = AF_INET;
-    server_address.sin_addr.s_addr = htonl(INADDR_ANY);
-    server_address.sin_port = htons(port_);
+
+    server_address.sin_addr.s_addr =
+        htonl(INADDR_ANY);
+
+    server_address.sin_port =
+        htons(port_);
 
     const int result = ::bind(
         server_fd_,
-        reinterpret_cast<const sockaddr*>(&server_address),
+        reinterpret_cast<const sockaddr*>(
+            &server_address
+        ),
         sizeof(server_address)
     );
 
@@ -123,10 +136,13 @@ void TcpServer::listenForConnections() {
 }
 
 void TcpServer::createEpollInstance() {
-    epoll_fd_ = ::epoll_create1(EPOLL_CLOEXEC);
+    epoll_fd_ =
+        ::epoll_create1(EPOLL_CLOEXEC);
 
     if (epoll_fd_ == kInvalidFileDescriptor) {
-        throw makeSystemError("epoll_create1");
+        throw makeSystemError(
+            "epoll_create1"
+        );
     }
 }
 
@@ -141,23 +157,31 @@ void TcpServer::runEventLoop() {
     epoll_event events[kMaxEvents]{};
 
     while (true) {
-        const int ready_count = ::epoll_wait(
-            epoll_fd_,
-            events,
-            kMaxEvents,
-            -1
-        );
+        const int ready_count =
+            ::epoll_wait(
+                epoll_fd_,
+                events,
+                kMaxEvents,
+                -1
+            );
 
         if (ready_count == -1) {
             if (errno == EINTR) {
                 continue;
             }
 
-            throw makeSystemError("epoll_wait");
+            throw makeSystemError(
+                "epoll_wait"
+            );
         }
 
-        for (int index = 0; index < ready_count; ++index) {
-            const int ready_fd = events[index].data.fd;
+        for (
+            int index = 0;
+            index < ready_count;
+            ++index
+        ) {
+            const int ready_fd =
+                events[index].data.fd;
 
             const std::uint32_t event_flags =
                 events[index].events;
@@ -182,14 +206,21 @@ void TcpServer::handleNewConnection() {
         socklen_t client_address_length =
             sizeof(client_address);
 
-        const int client_fd = ::accept4(
-            server_fd_,
-            reinterpret_cast<sockaddr*>(&client_address),
-            &client_address_length,
-            SOCK_NONBLOCK | SOCK_CLOEXEC
-        );
+        const int client_fd =
+            ::accept4(
+                server_fd_,
+                reinterpret_cast<sockaddr*>(
+                    &client_address
+                ),
+                &client_address_length,
+                SOCK_NONBLOCK |
+                    SOCK_CLOEXEC
+            );
 
-        if (client_fd == kInvalidFileDescriptor) {
+        if (
+            client_fd ==
+            kInvalidFileDescriptor
+        ) {
             if (
                 errno == EAGAIN ||
                 errno == EWOULDBLOCK
@@ -201,25 +232,39 @@ void TcpServer::handleNewConnection() {
                 continue;
             }
 
-            throw makeSystemError("accept4");
+            throw makeSystemError(
+                "accept4"
+            );
         }
 
-        char client_ip[INET_ADDRSTRLEN]{};
+        char client_ip[
+            INET_ADDRSTRLEN
+        ]{};
 
-        const char* conversion_result = ::inet_ntop(
-            AF_INET,
-            &client_address.sin_addr,
-            client_ip,
-            sizeof(client_ip)
-        );
+        const char* conversion_result =
+            ::inet_ntop(
+                AF_INET,
+                &client_address.sin_addr,
+                client_ip,
+                sizeof(client_ip)
+            );
 
-        if (conversion_result == nullptr) {
+        if (
+            conversion_result ==
+            nullptr
+        ) {
             ::close(client_fd);
-            throw makeSystemError("inet_ntop");
+
+            throw makeSystemError(
+                "inet_ntop"
+            );
         }
 
-        std::unique_ptr<Connection> connection =
-            std::make_unique<Connection>(client_fd);
+        std::unique_ptr<Connection>
+            connection =
+                std::make_unique<Connection>(
+                    client_fd
+                );
 
         connections_.emplace(
             client_fd,
@@ -229,20 +274,27 @@ void TcpServer::handleNewConnection() {
         try {
             addToEpoll(
                 client_fd,
-                EPOLLIN | EPOLLRDHUP
+                EPOLLIN |
+                    EPOLLRDHUP
             );
         } catch (...) {
-            connections_.erase(client_fd);
+            connections_.erase(
+                client_fd
+            );
+
             throw;
         }
 
-        std::cout << "Client connected from "
-                  << client_ip
-                  << ':'
-                  << ntohs(client_address.sin_port)
-                  << " on fd "
-                  << client_fd
-                  << std::endl;
+        std::cout
+            << "Client connected from "
+            << client_ip
+            << ':'
+            << ntohs(
+                client_address.sin_port
+            )
+            << " on fd "
+            << client_fd
+            << std::endl;
     }
 }
 
@@ -253,17 +305,23 @@ void TcpServer::handleClientEvent(
     const auto connection_iterator =
         connections_.find(client_fd);
 
-    if (connection_iterator == connections_.end()) {
+    if (
+        connection_iterator ==
+        connections_.end()
+    ) {
         return;
     }
 
     Connection& connection =
         *connection_iterator->second;
 
-    if ((events & EPOLLERR) != 0U) {
-        std::cerr << "Socket error on fd "
-                  << client_fd
-                  << std::endl;
+    if (
+        (events & EPOLLERR) != 0U
+    ) {
+        std::cerr
+            << "Socket error on fd "
+            << client_fd
+            << std::endl;
 
         removeClient(client_fd);
         return;
@@ -273,7 +331,9 @@ void TcpServer::handleClientEvent(
         (events & EPOLLRDHUP) != 0U ||
         (events & EPOLLHUP) != 0U;
 
-    if ((events & EPOLLIN) != 0U) {
+    if (
+        (events & EPOLLIN) != 0U
+    ) {
         const bool connection_alive =
             readFromClient(connection);
 
@@ -283,7 +343,9 @@ void TcpServer::handleClientEvent(
         }
     }
 
-    if ((events & EPOLLOUT) != 0U) {
+    if (
+        (events & EPOLLOUT) != 0U
+    ) {
         const bool connection_alive =
             writeToClient(connection);
 
@@ -294,7 +356,9 @@ void TcpServer::handleClientEvent(
     }
 
     if (peer_closed) {
-        if (connection.hasPendingOutput()) {
+        if (
+            connection.hasPendingOutput()
+        ) {
             const bool connection_alive =
                 writeToClient(connection);
 
@@ -304,7 +368,9 @@ void TcpServer::handleClientEvent(
             }
         }
 
-        if (!connection.hasPendingOutput()) {
+        if (
+            !connection.hasPendingOutput()
+        ) {
             removeClient(client_fd);
         }
     }
@@ -318,34 +384,32 @@ bool TcpServer::readFromClient(
     bool peer_reached_eof = false;
 
     while (true) {
-        const ssize_t bytes_read = ::recv(
-            connection.fd(),
-            buffer,
-            sizeof(buffer),
-            0
-        );
+        const ssize_t bytes_read =
+            ::recv(
+                connection.fd(),
+                buffer,
+                sizeof(buffer),
+                0
+            );
 
         if (bytes_read > 0) {
-            const std::size_t bytes_received =
-                static_cast<std::size_t>(bytes_read);
+            const std::size_t
+                bytes_received =
+                    static_cast<std::size_t>(
+                        bytes_read
+                    );
 
             connection.appendInput(
                 buffer,
                 bytes_received
             );
 
-            std::cout << "Received "
-                      << bytes_received
-                      << " bytes from fd "
-                      << connection.fd()
-                      << std::endl;
-
-            connection.appendOutput(
-                std::string_view(
-                    buffer,
-                    bytes_received
-                )
-            );
+            std::cout
+                << "Received "
+                << bytes_received
+                << " bytes from fd "
+                << connection.fd()
+                << std::endl;
 
             continue;
         }
@@ -369,7 +433,16 @@ bool TcpServer::readFromClient(
         return false;
     }
 
-    if (connection.hasPendingOutput()) {
+    const bool protocol_valid =
+        processInput(connection);
+
+    if (!protocol_valid) {
+        return false;
+    }
+
+    if (
+        connection.hasPendingOutput()
+    ) {
         const bool connection_alive =
             writeToClient(connection);
 
@@ -377,8 +450,6 @@ bool TcpServer::readFromClient(
             return false;
         }
     }
-
-    connection.clearInput();
 
     if (
         peer_reached_eof &&
@@ -390,23 +461,84 @@ bool TcpServer::readFromClient(
     return true;
 }
 
+bool TcpServer::processInput(
+    Connection& connection
+) {
+    while (
+        !connection.inputBuffer().empty()
+    ) {
+        const protocol::ParseResult result =
+            resp_parser_.parse(
+                connection.inputBuffer()
+            );
+
+        if (
+            result.status ==
+            protocol::ParseStatus::Incomplete
+        ) {
+            return true;
+        }
+
+        if (
+            result.status ==
+            protocol::ParseStatus::Error
+        ) {
+            std::cerr
+                << "RESP protocol error on fd "
+                << connection.fd()
+                << ": "
+                << result.error_message
+                << std::endl;
+
+            connection.appendOutput(
+                "-ERR Protocol error\r\n"
+            );
+
+            return true;
+        }
+
+        std::cout
+            << "Parsed complete RESP value from fd "
+            << connection.fd()
+            << ", consumed "
+            << result.consumed
+            << " bytes"
+            << std::endl;
+
+        connection.consumeInput(
+            result.consumed
+        );
+
+        connection.appendOutput(
+            "+OK\r\n"
+        );
+    }
+
+    return true;
+}
+
 bool TcpServer::writeToClient(
     Connection& connection
 ) {
-    while (connection.hasPendingOutput()) {
+    while (
+        connection.hasPendingOutput()
+    ) {
         const std::string_view output =
             connection.pendingOutput();
 
-        const ssize_t bytes_sent = ::send(
-            connection.fd(),
-            output.data(),
-            output.size(),
-            MSG_NOSIGNAL
-        );
+        const ssize_t bytes_sent =
+            ::send(
+                connection.fd(),
+                output.data(),
+                output.size(),
+                MSG_NOSIGNAL
+            );
 
         if (bytes_sent > 0) {
             connection.consumeOutput(
-                static_cast<std::size_t>(bytes_sent)
+                static_cast<std::size_t>(
+                    bytes_sent
+                )
             );
 
             continue;
@@ -441,7 +573,8 @@ bool TcpServer::writeToClient(
 
     updateClientEvents(
         connection.fd(),
-        EPOLLIN | EPOLLRDHUP
+        EPOLLIN |
+            EPOLLRDHUP
     );
 
     return true;
@@ -456,15 +589,18 @@ void TcpServer::updateClientEvents(
     event.events = events;
     event.data.fd = client_fd;
 
-    const int result = ::epoll_ctl(
-        epoll_fd_,
-        EPOLL_CTL_MOD,
-        client_fd,
-        &event
-    );
+    const int result =
+        ::epoll_ctl(
+            epoll_fd_,
+            EPOLL_CTL_MOD,
+            client_fd,
+            &event
+        );
 
     if (result == -1) {
-        throw makeSystemError("epoll_ctl modify");
+        throw makeSystemError(
+            "epoll_ctl modify"
+        );
     }
 }
 
@@ -477,25 +613,31 @@ void TcpServer::addToEpoll(
     event.events = events;
     event.data.fd = fd;
 
-    const int result = ::epoll_ctl(
-        epoll_fd_,
-        EPOLL_CTL_ADD,
-        fd,
-        &event
-    );
+    const int result =
+        ::epoll_ctl(
+            epoll_fd_,
+            EPOLL_CTL_ADD,
+            fd,
+            &event
+        );
 
     if (result == -1) {
-        throw makeSystemError("epoll_ctl add");
+        throw makeSystemError(
+            "epoll_ctl add"
+        );
     }
 }
 
-void TcpServer::removeClient(int client_fd) {
-    const int result = ::epoll_ctl(
-        epoll_fd_,
-        EPOLL_CTL_DEL,
-        client_fd,
-        nullptr
-    );
+void TcpServer::removeClient(
+    int client_fd
+) {
+    const int result =
+        ::epoll_ctl(
+            epoll_fd_,
+            EPOLL_CTL_DEL,
+            client_fd,
+            nullptr
+        );
 
     if (
         result == -1 &&
@@ -510,11 +652,14 @@ void TcpServer::removeClient(int client_fd) {
             << std::endl;
     }
 
-    connections_.erase(client_fd);
+    connections_.erase(
+        client_fd
+    );
 
-    std::cout << "Client disconnected from fd "
-              << client_fd
-              << std::endl;
+    std::cout
+        << "Client disconnected from fd "
+        << client_fd
+        << std::endl;
 }
 
 }  // namespace redis::net

@@ -15,6 +15,7 @@ add_executable(
     src/main.cpp
     src/net/connection.cpp
     src/net/tcp_server.cpp
+    src/protocol/resp_parser.cpp
 )
 
 target_include_directories(

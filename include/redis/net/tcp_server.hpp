@@ -1,5 +1,6 @@
 #pragma once
 
+#include "redis/command/command_handler.hpp"
 #include "redis/net/connection.hpp"
 #include "redis/protocol/resp_parser.hpp"
 
@@ -67,6 +68,7 @@ private:
     > connections_;
 
     protocol::RespParser resp_parser_;
+    command::CommandHandler command_handler_;
 };
 
 }  // namespace redis::net

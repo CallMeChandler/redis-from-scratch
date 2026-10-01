@@ -38,7 +38,8 @@ TcpServer::TcpServer(std::uint16_t port)
       server_fd_(kInvalidFileDescriptor),
       epoll_fd_(kInvalidFileDescriptor),
       connections_(),
-      resp_parser_() {
+      resp_parser_(),
+      command_handler_() {
 }
 
 TcpServer::~TcpServer() {
@@ -104,10 +105,8 @@ void TcpServer::bindSocket() {
     sockaddr_in server_address{};
 
     server_address.sin_family = AF_INET;
-
     server_address.sin_addr.s_addr =
         htonl(INADDR_ANY);
-
     server_address.sin_port =
         htons(port_);
 
@@ -249,10 +248,7 @@ void TcpServer::handleNewConnection() {
                 sizeof(client_ip)
             );
 
-        if (
-            conversion_result ==
-            nullptr
-        ) {
+        if (conversion_result == nullptr) {
             ::close(client_fd);
 
             throw makeSystemError(
@@ -260,11 +256,10 @@ void TcpServer::handleNewConnection() {
             );
         }
 
-        std::unique_ptr<Connection>
-            connection =
-                std::make_unique<Connection>(
-                    client_fd
-                );
+        std::unique_ptr<Connection> connection =
+            std::make_unique<Connection>(
+                client_fd
+            );
 
         connections_.emplace(
             client_fd,
@@ -315,9 +310,7 @@ void TcpServer::handleClientEvent(
     Connection& connection =
         *connection_iterator->second;
 
-    if (
-        (events & EPOLLERR) != 0U
-    ) {
+    if ((events & EPOLLERR) != 0U) {
         std::cerr
             << "Socket error on fd "
             << client_fd
@@ -331,9 +324,7 @@ void TcpServer::handleClientEvent(
         (events & EPOLLRDHUP) != 0U ||
         (events & EPOLLHUP) != 0U;
 
-    if (
-        (events & EPOLLIN) != 0U
-    ) {
+    if ((events & EPOLLIN) != 0U) {
         const bool connection_alive =
             readFromClient(connection);
 
@@ -343,9 +334,7 @@ void TcpServer::handleClientEvent(
         }
     }
 
-    if (
-        (events & EPOLLOUT) != 0U
-    ) {
+    if ((events & EPOLLOUT) != 0U) {
         const bool connection_alive =
             writeToClient(connection);
 
@@ -393,11 +382,10 @@ bool TcpServer::readFromClient(
             );
 
         if (bytes_read > 0) {
-            const std::size_t
-                bytes_received =
-                    static_cast<std::size_t>(
-                        bytes_read
-                    );
+            const std::size_t bytes_received =
+                static_cast<std::size_t>(
+                    bytes_read
+                );
 
             connection.appendInput(
                 buffer,
@@ -494,24 +482,30 @@ bool TcpServer::processInput(
                 "-ERR Protocol error\r\n"
             );
 
+            connection.consumeInput(
+                connection.inputBuffer().size()
+            );
+
             return true;
         }
-
-        std::cout
-            << "Parsed complete RESP value from fd "
-            << connection.fd()
-            << ", consumed "
-            << result.consumed
-            << " bytes"
-            << std::endl;
 
         connection.consumeInput(
             result.consumed
         );
 
+        const std::string response =
+            command_handler_.execute(
+                result.value
+            );
+
         connection.appendOutput(
-            "+OK\r\n"
+            response
         );
+
+        std::cout
+            << "Executed RESP command on fd "
+            << connection.fd()
+            << std::endl;
     }
 
     return true;

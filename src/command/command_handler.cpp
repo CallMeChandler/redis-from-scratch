@@ -2,15 +2,22 @@
 
 #include <algorithm>
 #include <cctype>
+#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
 
 namespace redis::command {
 
+CommandHandler::CommandHandler(
+    storage::StringStore& string_store
+)
+    : string_store_(string_store) {
+}
+
 std::string CommandHandler::execute(
     const protocol::RespValue& value
-) const {
+) {
     std::vector<std::string> arguments;
 
     if (!extractArguments(value, arguments)) {
@@ -26,14 +33,24 @@ std::string CommandHandler::execute(
     }
 
     const std::string command =
-        normalizeCommand(arguments[0]);
+        normalizeCommand(
+            arguments[0]
+        );
 
-    if (command=="PING"){
+    if (command == "PING") {
         return executePing(arguments);
     }
 
-    if (command=="ECHO"){
+    if (command == "ECHO") {
         return executeEcho(arguments);
+    }
+
+    if (command == "SET") {
+        return executeSet(arguments);
+    }
+
+    if (command == "GET") {
+        return executeGet(arguments);
     }
 
     return encodeError(
@@ -52,20 +69,23 @@ bool CommandHandler::extractArguments(
             &value.value
         );
 
-    if (array==nullptr){
+    if (array == nullptr) {
         return false;
     }
 
     arguments.clear();
     arguments.reserve(array->size());
 
-    for (const protocol::RespValue& element:*array) {
+    for (
+        const protocol::RespValue& element :
+        *array
+    ) {
         const protocol::BulkString* bulk_string =
             std::get_if<protocol::BulkString>(
                 &element.value
             );
 
-        if (bulk_string!=nullptr){
+        if (bulk_string != nullptr) {
             arguments.push_back(
                 bulk_string->value
             );
@@ -78,7 +98,7 @@ bool CommandHandler::extractArguments(
                 &element.value
             );
 
-        if (simple_string!=nullptr){
+        if (simple_string != nullptr) {
             arguments.push_back(
                 simple_string->value
             );
@@ -112,13 +132,13 @@ std::string CommandHandler::normalizeCommand(
 std::string CommandHandler::executePing(
     const std::vector<std::string>& arguments
 ) {
-    if (arguments.size() == 1){
+    if (arguments.size() == 1) {
         return encodeSimpleString(
             "PONG"
         );
     }
 
-    if (arguments.size() == 2){
+    if (arguments.size() == 2) {
         return encodeBulkString(
             arguments[1]
         );
@@ -132,7 +152,7 @@ std::string CommandHandler::executePing(
 std::string CommandHandler::executeEcho(
     const std::vector<std::string>& arguments
 ) {
-    if (arguments.size()!=2) {
+    if (arguments.size() != 2) {
         return encodeError(
             "ERR wrong number of arguments for 'echo' command"
         );
@@ -143,26 +163,76 @@ std::string CommandHandler::executeEcho(
     );
 }
 
+std::string CommandHandler::executeSet(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'set' command"
+        );
+    }
+
+    string_store_.set(
+        arguments[1],
+        arguments[2]
+    );
+
+    return encodeSimpleString(
+        "OK"
+    );
+}
+
+std::string CommandHandler::executeGet(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'get' command"
+        );
+    }
+
+    const std::optional<std::string> value =
+        string_store_.get(
+            arguments[1]
+        );
+
+    if (!value.has_value()) {
+        return encodeNullBulkString();
+    }
+
+    return encodeBulkString(
+        value.value()
+    );
+}
+
 std::string CommandHandler::encodeSimpleString(
     const std::string& value
 ) {
-    return "+" + value + "\r\n";
+    return "+" +
+           value +
+           "\r\n";
 }
 
 std::string CommandHandler::encodeBulkString(
     const std::string& value
 ) {
     return "$" +
-            std::to_string(value.size()) +
-            "\r\n" +
-            value +
-            "\r\n";
+           std::to_string(value.size()) +
+           "\r\n" +
+           value +
+           "\r\n";
+}
+
+std::string CommandHandler::encodeNullBulkString() {
+    return "$-1\r\n";
 }
 
 std::string CommandHandler::encodeError(
     const std::string& message
 ) {
-    return "-" + message + "\r\n";
+    return "-" +
+           message +
+           "\r\n";
 }
 
-}
+}  // namespace redis::command

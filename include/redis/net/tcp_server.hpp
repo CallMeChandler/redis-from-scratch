@@ -3,6 +3,7 @@
 #include "redis/command/command_handler.hpp"
 #include "redis/net/connection.hpp"
 #include "redis/protocol/resp_parser.hpp"
+#include "redis/storage/string_store.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -68,6 +69,8 @@ private:
     > connections_;
 
     protocol::RespParser resp_parser_;
+
+    storage::StringStore string_store_;
     command::CommandHandler command_handler_;
 };
 

@@ -39,7 +39,8 @@ TcpServer::TcpServer(std::uint16_t port)
       epoll_fd_(kInvalidFileDescriptor),
       connections_(),
       resp_parser_(),
-      command_handler_() {
+      string_store_(),
+      command_handler_(string_store_) {
 }
 
 TcpServer::~TcpServer() {

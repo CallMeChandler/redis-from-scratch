@@ -1,6 +1,7 @@
 #pragma once
 
 #include "redis/protocol/resp_value.hpp"
+#include "redis/storage/string_store.hpp"
 
 #include <string>
 #include <vector>
@@ -9,10 +10,14 @@ namespace redis::command {
 
 class CommandHandler {
 public:
+    explicit CommandHandler(
+        storage::StringStore& string_store
+    );
+
     [[nodiscard]]
     std::string execute(
         const protocol::RespValue& value
-    ) const;
+    );
 
 private:
     [[nodiscard]]
@@ -37,6 +42,16 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeSet(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeGet(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );
@@ -47,9 +62,14 @@ private:
     );
 
     [[nodiscard]]
+    static std::string encodeNullBulkString();
+
+    [[nodiscard]]
     static std::string encodeError(
         const std::string& message
     );
+
+    storage::StringStore& string_store_;
 };
 
-}
+}  // namespace redis::command

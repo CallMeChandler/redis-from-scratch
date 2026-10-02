@@ -3,7 +3,7 @@
 #include "redis/command/command_handler.hpp"
 #include "redis/net/connection.hpp"
 #include "redis/protocol/resp_parser.hpp"
-#include "redis/storage/string_store.hpp"
+#include "redis/storage/database.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -70,7 +70,7 @@ private:
 
     protocol::RespParser resp_parser_;
 
-    storage::StringStore string_store_;
+    storage::Database database_;
     command::CommandHandler command_handler_;
 };
 

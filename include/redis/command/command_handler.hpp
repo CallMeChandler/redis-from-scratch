@@ -1,7 +1,7 @@
 #pragma once
 
 #include "redis/protocol/resp_value.hpp"
-#include "redis/storage/string_store.hpp"
+#include "redis/storage/database.hpp"
 
 #include <string>
 #include <vector>
@@ -11,7 +11,7 @@ namespace redis::command {
 class CommandHandler {
 public:
     explicit CommandHandler(
-        storage::StringStore& string_store
+        storage::Database& database
     );
 
     [[nodiscard]]
@@ -52,6 +52,16 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeExists(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeDel(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );
@@ -65,11 +75,16 @@ private:
     static std::string encodeNullBulkString();
 
     [[nodiscard]]
+    static std::string encodeInteger(
+        long long value
+    );
+
+    [[nodiscard]]
     static std::string encodeError(
         const std::string& message
     );
 
-    storage::StringStore& string_store_;
+    storage::Database& database_;
 };
 
 }  // namespace redis::command

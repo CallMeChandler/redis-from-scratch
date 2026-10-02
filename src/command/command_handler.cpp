@@ -10,9 +10,9 @@
 namespace redis::command {
 
 CommandHandler::CommandHandler(
-    storage::StringStore& string_store
+    storage::Database& database
 )
-    : string_store_(string_store) {
+    : database_(database) {
 }
 
 std::string CommandHandler::execute(
@@ -33,9 +33,7 @@ std::string CommandHandler::execute(
     }
 
     const std::string command =
-        normalizeCommand(
-            arguments[0]
-        );
+        normalizeCommand(arguments[0]);
 
     if (command == "PING") {
         return executePing(arguments);
@@ -51,6 +49,14 @@ std::string CommandHandler::execute(
 
     if (command == "GET") {
         return executeGet(arguments);
+    }
+
+    if (command == "EXISTS") {
+        return executeExists(arguments);
+    }
+
+    if (command == "DEL") {
+        return executeDel(arguments);
     }
 
     return encodeError(
@@ -172,7 +178,7 @@ std::string CommandHandler::executeSet(
         );
     }
 
-    string_store_.set(
+    database_.setString(
         arguments[1],
         arguments[2]
     );
@@ -192,7 +198,7 @@ std::string CommandHandler::executeGet(
     }
 
     const std::optional<std::string> value =
-        string_store_.get(
+        database_.getString(
             arguments[1]
         );
 
@@ -202,6 +208,66 @@ std::string CommandHandler::executeGet(
 
     return encodeBulkString(
         value.value()
+    );
+}
+
+std::string CommandHandler::executeExists(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() < 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'exists' command"
+        );
+    }
+
+    long long existing_keys = 0;
+
+    for (
+        std::size_t index = 1;
+        index < arguments.size();
+        ++index
+    ) {
+        if (
+            database_.exists(
+                arguments[index]
+            )
+        ) {
+            ++existing_keys;
+        }
+    }
+
+    return encodeInteger(
+        existing_keys
+    );
+}
+
+std::string CommandHandler::executeDel(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() < 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'del' command"
+        );
+    }
+
+    long long deleted_keys = 0;
+
+    for (
+        std::size_t index = 1;
+        index < arguments.size();
+        ++index
+    ) {
+        if (
+            database_.erase(
+                arguments[index]
+            )
+        ) {
+            ++deleted_keys;
+        }
+    }
+
+    return encodeInteger(
+        deleted_keys
     );
 }
 
@@ -225,6 +291,14 @@ std::string CommandHandler::encodeBulkString(
 
 std::string CommandHandler::encodeNullBulkString() {
     return "$-1\r\n";
+}
+
+std::string CommandHandler::encodeInteger(
+    long long value
+) {
+    return ":" +
+           std::to_string(value) +
+           "\r\n";
 }
 
 std::string CommandHandler::encodeError(

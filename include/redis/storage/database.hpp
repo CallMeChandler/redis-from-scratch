@@ -3,11 +3,26 @@
 #include "redis/storage/redis_value.hpp"
 
 #include <cstddef>
-#include <optional>
 #include <string>
 #include <unordered_map>
 
 namespace redis::storage {
+
+enum class LookupStatus {
+    Found,
+    Missing,
+    WrongType
+};
+
+struct StringLookupResult {
+    LookupStatus status;
+    std::string value;
+};
+
+struct HashLookupResult {
+    LookupStatus status;
+    std::string value;
+};
 
 class Database {
 public:
@@ -17,7 +32,7 @@ public:
     );
 
     [[nodiscard]]
-    std::optional<std::string> getString(
+    StringLookupResult getString(
         const std::string& key
     ) const;
 
@@ -32,6 +47,18 @@ public:
 
     [[nodiscard]]
     std::size_t size() const noexcept;
+
+    bool hashSet(
+        const std::string& key,
+        std::string field,
+        std::string value
+    );
+
+    [[nodiscard]]
+    HashLookupResult hashGet(
+        const std::string& key,
+        const std::string& field
+    ) const;
 
 private:
     std::unordered_map<

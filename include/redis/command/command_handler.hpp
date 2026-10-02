@@ -62,6 +62,16 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeHSet(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeHGet(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );
@@ -83,6 +93,9 @@ private:
     static std::string encodeError(
         const std::string& message
     );
+
+    [[nodiscard]]
+    static std::string encodeWrongTypeError();
 
     storage::Database& database_;
 };

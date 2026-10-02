@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <optional>
 #include <string>
 #include <variant>
 #include <vector>
@@ -33,7 +32,9 @@ std::string CommandHandler::execute(
     }
 
     const std::string command =
-        normalizeCommand(arguments[0]);
+        normalizeCommand(
+            arguments[0]
+        );
 
     if (command == "PING") {
         return executePing(arguments);
@@ -59,6 +60,14 @@ std::string CommandHandler::execute(
         return executeDel(arguments);
     }
 
+    if (command == "HSET") {
+        return executeHSet(arguments);
+    }
+
+    if (command == "HGET") {
+        return executeHGet(arguments);
+    }
+
     return encodeError(
         "ERR unknown command '" +
         arguments[0] +
@@ -80,7 +89,9 @@ bool CommandHandler::extractArguments(
     }
 
     arguments.clear();
-    arguments.reserve(array->size());
+    arguments.reserve(
+        array->size()
+    );
 
     for (
         const protocol::RespValue& element :
@@ -197,17 +208,27 @@ std::string CommandHandler::executeGet(
         );
     }
 
-    const std::optional<std::string> value =
+    const storage::StringLookupResult result =
         database_.getString(
             arguments[1]
         );
 
-    if (!value.has_value()) {
+    if (
+        result.status ==
+        storage::LookupStatus::Missing
+    ) {
         return encodeNullBulkString();
     }
 
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
     return encodeBulkString(
-        value.value()
+        result.value
     );
 }
 
@@ -271,6 +292,65 @@ std::string CommandHandler::executeDel(
     );
 }
 
+std::string CommandHandler::executeHSet(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 4) {
+        return encodeError(
+            "ERR wrong number of arguments for 'hset' command"
+        );
+    }
+
+    const bool success =
+        database_.hashSet(
+            arguments[1],
+            arguments[2],
+            arguments[3]
+        );
+
+    if (!success) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        1
+    );
+}
+
+std::string CommandHandler::executeHGet(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'hget' command"
+        );
+    }
+
+    const storage::HashLookupResult result =
+        database_.hashGet(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    if (
+        result.status ==
+        storage::LookupStatus::Missing
+    ) {
+        return encodeNullBulkString();
+    }
+
+    return encodeBulkString(
+        result.value
+    );
+}
+
 std::string CommandHandler::encodeSimpleString(
     const std::string& value
 ) {
@@ -283,7 +363,9 @@ std::string CommandHandler::encodeBulkString(
     const std::string& value
 ) {
     return "$" +
-           std::to_string(value.size()) +
+           std::to_string(
+               value.size()
+           ) +
            "\r\n" +
            value +
            "\r\n";
@@ -307,6 +389,12 @@ std::string CommandHandler::encodeError(
     return "-" +
            message +
            "\r\n";
+}
+
+std::string CommandHandler::encodeWrongTypeError() {
+    return
+        "-WRONGTYPE Operation against a key "
+        "holding the wrong kind of value\r\n";
 }
 
 }  // namespace redis::command

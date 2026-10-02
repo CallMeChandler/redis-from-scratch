@@ -1,15 +1,22 @@
 #pragma once
 
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 
 namespace redis::storage {
 
-enum class RedisType {
-    String
-};
+using RedisHash =
+    std::unordered_map<
+        std::string,
+        std::string
+    >;
 
+enum class RedisType {
+    String,
+    Hash
+};
 
 class RedisValue {
 public:
@@ -17,20 +24,49 @@ public:
         : value_(std::move(value)) {
     }
 
+    explicit RedisValue(RedisHash value)
+        : value_(std::move(value)) {
+    }
+
     [[nodiscard]]
     RedisType type() const noexcept {
-        return RedisType::String;
+        if (
+            std::holds_alternative<std::string>(
+                value_
+            )
+        ) {
+            return RedisType::String;
+        }
+
+        return RedisType::Hash;
     }
 
     [[nodiscard]]
     const std::string& asString() const {
-        return std::get<std::string>(value_);
+        return std::get<std::string>(
+            value_
+        );
+    }
+
+    [[nodiscard]]
+    RedisHash& asHash() {
+        return std::get<RedisHash>(
+            value_
+        );
+    }
+
+    [[nodiscard]]
+    const RedisHash& asHash() const {
+        return std::get<RedisHash>(
+            value_
+        );
     }
 
 private:
     std::variant<
-        std::string
+        std::string,
+        RedisHash
     > value_;
 };
 
-}
+}  // namespace redis::storage

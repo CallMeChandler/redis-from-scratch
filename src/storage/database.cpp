@@ -152,4 +152,154 @@ HashLookupResult Database::hashGet(
     };
 }
 
+ListPushResult Database::listPushLeft(
+    const std::string& key,
+    std::string value
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        RedisList list;
+
+        list.push_front(
+            std::move(value)
+        );
+
+        values_.emplace(
+            key,
+            RedisValue{
+                std::move(list)
+            }
+        );
+
+        return ListPushResult{
+            LookupStatus::Found,
+            1
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::List
+    ) {
+        return ListPushResult{
+            LookupStatus::WrongType,
+            0
+        };
+    }
+
+    RedisList& list =
+        iterator->second.asList();
+
+    list.push_front(
+        std::move(value)
+    );
+
+    return ListPushResult{
+        LookupStatus::Found,
+        list.size()
+    };
+}
+
+ListPushResult Database::listPushRight(
+    const std::string& key,
+    std::string value
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        RedisList list;
+
+        list.push_back(
+            std::move(value)
+        );
+
+        values_.emplace(
+            key,
+            RedisValue{
+                std::move(list)
+            }
+        );
+
+        return ListPushResult{
+            LookupStatus::Found,
+            1
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::List
+    ) {
+        return ListPushResult{
+            LookupStatus::WrongType,
+            0
+        };
+    }
+
+    RedisList& list =
+        iterator->second.asList();
+
+    list.push_back(
+        std::move(value)
+    );
+
+    return ListPushResult{
+        LookupStatus::Found,
+        list.size()
+    };
+}
+
+ListPopResult Database::listPopLeft(
+    const std::string& key
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        return ListPopResult{
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::List
+    ) {
+        return ListPopResult{
+            LookupStatus::WrongType,
+            {}
+        };
+    }
+
+    RedisList& list =
+        iterator->second.asList();
+
+    if (list.empty()) {
+        values_.erase(iterator);
+
+        return ListPopResult{
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    std::string value =
+        std::move(list.front());
+
+    list.pop_front();
+
+    if (list.empty()) {
+        values_.erase(iterator);
+    }
+
+    return ListPopResult{
+        LookupStatus::Found,
+        std::move(value)
+    };
+}
+
 }  // namespace redis::storage

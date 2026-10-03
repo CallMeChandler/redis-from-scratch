@@ -24,6 +24,16 @@ struct HashLookupResult {
     std::string value;
 };
 
+struct ListPushResult {
+    LookupStatus status;
+    std::size_t length;
+};
+
+struct ListPopResult {
+    LookupStatus status;
+    std::string value;
+};
+
 class Database {
 public:
     void setString(
@@ -59,6 +69,23 @@ public:
         const std::string& key,
         const std::string& field
     ) const;
+
+    [[nodiscard]]
+    ListPushResult listPushLeft(
+        const std::string& key,
+        std::string value
+    );
+
+    [[nodiscard]]
+    ListPushResult listPushRight(
+        const std::string& key,
+        std::string value
+    );
+
+    [[nodiscard]]
+    ListPopResult listPopLeft(
+        const std::string& key
+    );
 
 private:
     std::unordered_map<

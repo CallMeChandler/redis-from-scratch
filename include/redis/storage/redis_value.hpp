@@ -1,5 +1,6 @@
 #pragma once
 
+#include <deque>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -13,9 +14,13 @@ using RedisHash =
         std::string
     >;
 
+using RedisList =
+    std::deque<std::string>;
+
 enum class RedisType {
     String,
-    Hash
+    Hash,
+    List
 };
 
 class RedisValue {
@@ -25,6 +30,10 @@ public:
     }
 
     explicit RedisValue(RedisHash value)
+        : value_(std::move(value)) {
+    }
+
+    explicit RedisValue(RedisList value)
         : value_(std::move(value)) {
     }
 
@@ -38,7 +47,15 @@ public:
             return RedisType::String;
         }
 
-        return RedisType::Hash;
+        if (
+            std::holds_alternative<RedisHash>(
+                value_
+            )
+        ) {
+            return RedisType::Hash;
+        }
+
+        return RedisType::List;
     }
 
     [[nodiscard]]
@@ -62,10 +79,25 @@ public:
         );
     }
 
+    [[nodiscard]]
+    RedisList& asList() {
+        return std::get<RedisList>(
+            value_
+        );
+    }
+
+    [[nodiscard]]
+    const RedisList& asList() const {
+        return std::get<RedisList>(
+            value_
+        );
+    }
+
 private:
     std::variant<
         std::string,
-        RedisHash
+        RedisHash,
+        RedisList
     > value_;
 };
 

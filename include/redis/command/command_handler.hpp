@@ -72,6 +72,21 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeLPush(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeRPush(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeLPop(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );

@@ -32,9 +32,7 @@ std::string CommandHandler::execute(
     }
 
     const std::string command =
-        normalizeCommand(
-            arguments[0]
-        );
+        normalizeCommand(arguments[0]);
 
     if (command == "PING") {
         return executePing(arguments);
@@ -66,6 +64,18 @@ std::string CommandHandler::execute(
 
     if (command == "HGET") {
         return executeHGet(arguments);
+    }
+
+    if (command == "LPUSH") {
+        return executeLPush(arguments);
+    }
+
+    if (command == "RPUSH") {
+        return executeRPush(arguments);
+    }
+
+    if (command == "LPOP") {
+        return executeLPop(arguments);
     }
 
     return encodeError(
@@ -330,6 +340,97 @@ std::string CommandHandler::executeHGet(
         database_.hashGet(
             arguments[1],
             arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    if (
+        result.status ==
+        storage::LookupStatus::Missing
+    ) {
+        return encodeNullBulkString();
+    }
+
+    return encodeBulkString(
+        result.value
+    );
+}
+
+std::string CommandHandler::executeLPush(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'lpush' command"
+        );
+    }
+
+    const storage::ListPushResult result =
+        database_.listPushLeft(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        static_cast<long long>(
+            result.length
+        )
+    );
+}
+
+std::string CommandHandler::executeRPush(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'rpush' command"
+        );
+    }
+
+    const storage::ListPushResult result =
+        database_.listPushRight(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        static_cast<long long>(
+            result.length
+        )
+    );
+}
+
+std::string CommandHandler::executeLPop(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'lpop' command"
+        );
+    }
+
+    const storage::ListPopResult result =
+        database_.listPopLeft(
+            arguments[1]
         );
 
     if (

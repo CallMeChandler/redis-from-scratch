@@ -32,6 +32,12 @@ private:
     );
 
     [[nodiscard]]
+    static bool parseInteger(
+        const std::string& text,
+        long long& value
+    );
+
+    [[nodiscard]]
     static std::string executePing(
         const std::vector<std::string>& arguments
     );
@@ -87,6 +93,21 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeRPop(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeLRange(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeLLen(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );
@@ -102,6 +123,11 @@ private:
     [[nodiscard]]
     static std::string encodeInteger(
         long long value
+    );
+
+    [[nodiscard]]
+    static std::string encodeArray(
+        const std::vector<std::string>& values
     );
 
     [[nodiscard]]

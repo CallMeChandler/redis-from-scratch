@@ -1,7 +1,9 @@
 #include "redis/storage/database.hpp"
 
+#include <algorithm>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace redis::storage {
 
@@ -299,6 +301,184 @@ ListPopResult Database::listPopLeft(
     return ListPopResult{
         LookupStatus::Found,
         std::move(value)
+    };
+}
+
+ListPopResult Database::listPopRight(
+    const std::string& key
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        return ListPopResult{
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::List
+    ) {
+        return ListPopResult{
+            LookupStatus::WrongType,
+            {}
+        };
+    }
+
+    RedisList& list =
+        iterator->second.asList();
+
+    if (list.empty()) {
+        values_.erase(iterator);
+
+        return ListPopResult{
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    std::string value =
+        std::move(list.back());
+
+    list.pop_back();
+
+    if (list.empty()) {
+        values_.erase(iterator);
+    }
+
+    return ListPopResult{
+        LookupStatus::Found,
+        std::move(value)
+    };
+}
+
+ListRangeResult Database::listRange(
+    const std::string& key,
+    long long start,
+    long long stop
+) const {
+    const auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        return ListRangeResult{
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::List
+    ) {
+        return ListRangeResult{
+            LookupStatus::WrongType,
+            {}
+        };
+    }
+
+    const RedisList& list =
+        iterator->second.asList();
+
+    const long long length =
+        static_cast<long long>(
+            list.size()
+        );
+
+    if (length == 0) {
+        return ListRangeResult{
+            LookupStatus::Found,
+            {}
+        };
+    }
+
+    if (start < 0) {
+        start = length + start;
+    }
+
+    if (stop < 0) {
+        stop = length + stop;
+    }
+
+    start = std::max(
+        0LL,
+        start
+    );
+
+    stop = std::min(
+        length - 1,
+        stop
+    );
+
+    if (
+        start >= length ||
+        stop < 0 ||
+        start > stop
+    ) {
+        return ListRangeResult{
+            LookupStatus::Found,
+            {}
+        };
+    }
+
+    std::vector<std::string> result;
+
+    result.reserve(
+        static_cast<std::size_t>(
+            stop - start + 1
+        )
+    );
+
+    for (
+        long long index = start;
+        index <= stop;
+        ++index
+    ) {
+        result.push_back(
+            list[
+                static_cast<std::size_t>(
+                    index
+                )
+            ]
+        );
+    }
+
+    return ListRangeResult{
+        LookupStatus::Found,
+        std::move(result)
+    };
+}
+
+ListLengthResult Database::listLength(
+    const std::string& key
+) const {
+    const auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        return ListLengthResult{
+            LookupStatus::Missing,
+            0
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::List
+    ) {
+        return ListLengthResult{
+            LookupStatus::WrongType,
+            0
+        };
+    }
+
+    return ListLengthResult{
+        LookupStatus::Found,
+        iterator->second
+            .asList()
+            .size()
     };
 }
 

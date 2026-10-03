@@ -1,6 +1,7 @@
 #include "redis/command/command_handler.hpp"
 
 #include <algorithm>
+#include <charconv>
 #include <cctype>
 #include <string>
 #include <variant>
@@ -78,6 +79,18 @@ std::string CommandHandler::execute(
         return executeLPop(arguments);
     }
 
+    if (command == "RPOP") {
+        return executeRPop(arguments);
+    }
+
+    if (command == "LRANGE") {
+        return executeLRange(arguments);
+    }
+
+    if (command == "LLEN") {
+        return executeLLen(arguments);
+    }
+
     return encodeError(
         "ERR unknown command '" +
         arguments[0] +
@@ -99,6 +112,7 @@ bool CommandHandler::extractArguments(
     }
 
     arguments.clear();
+
     arguments.reserve(
         array->size()
     );
@@ -154,6 +168,33 @@ std::string CommandHandler::normalizeCommand(
     );
 
     return command;
+}
+
+bool CommandHandler::parseInteger(
+    const std::string& text,
+    long long& value
+) {
+    if (text.empty()) {
+        return false;
+    }
+
+    const char* begin =
+        text.data();
+
+    const char* end =
+        text.data() +
+        text.size();
+
+    const auto result =
+        std::from_chars(
+            begin,
+            end,
+            value
+        );
+
+    return result.ec ==
+               std::errc{} &&
+           result.ptr == end;
 }
 
 std::string CommandHandler::executePing(
@@ -322,9 +363,7 @@ std::string CommandHandler::executeHSet(
         return encodeWrongTypeError();
     }
 
-    return encodeInteger(
-        1
-    );
+    return encodeInteger(1);
 }
 
 std::string CommandHandler::executeHGet(
@@ -452,6 +491,113 @@ std::string CommandHandler::executeLPop(
     );
 }
 
+std::string CommandHandler::executeRPop(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'rpop' command"
+        );
+    }
+
+    const storage::ListPopResult result =
+        database_.listPopRight(
+            arguments[1]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    if (
+        result.status ==
+        storage::LookupStatus::Missing
+    ) {
+        return encodeNullBulkString();
+    }
+
+    return encodeBulkString(
+        result.value
+    );
+}
+
+std::string CommandHandler::executeLRange(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 4) {
+        return encodeError(
+            "ERR wrong number of arguments for 'lrange' command"
+        );
+    }
+
+    long long start = 0;
+    long long stop = 0;
+
+    if (
+        !parseInteger(
+            arguments[2],
+            start
+        ) ||
+        !parseInteger(
+            arguments[3],
+            stop
+        )
+    ) {
+        return encodeError(
+            "ERR value is not an integer or out of range"
+        );
+    }
+
+    const storage::ListRangeResult result =
+        database_.listRange(
+            arguments[1],
+            start,
+            stop
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeArray(
+        result.values
+    );
+}
+
+std::string CommandHandler::executeLLen(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'llen' command"
+        );
+    }
+
+    const storage::ListLengthResult result =
+        database_.listLength(
+            arguments[1]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        static_cast<long long>(
+            result.length
+        )
+    );
+}
+
 std::string CommandHandler::encodeSimpleString(
     const std::string& value
 ) {
@@ -482,6 +628,29 @@ std::string CommandHandler::encodeInteger(
     return ":" +
            std::to_string(value) +
            "\r\n";
+}
+
+std::string CommandHandler::encodeArray(
+    const std::vector<std::string>& values
+) {
+    std::string output =
+        "*" +
+        std::to_string(
+            values.size()
+        ) +
+        "\r\n";
+
+    for (
+        const std::string& value :
+        values
+    ) {
+        output +=
+            encodeBulkString(
+                value
+            );
+    }
+
+    return output;
 }
 
 std::string CommandHandler::encodeError(

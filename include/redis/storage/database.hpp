@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 namespace redis::storage {
 
@@ -32,6 +33,16 @@ struct ListPushResult {
 struct ListPopResult {
     LookupStatus status;
     std::string value;
+};
+
+struct ListRangeResult {
+    LookupStatus status;
+    std::vector<std::string> values;
+};
+
+struct ListLengthResult {
+    LookupStatus status;
+    std::size_t length;
 };
 
 class Database {
@@ -86,6 +97,23 @@ public:
     ListPopResult listPopLeft(
         const std::string& key
     );
+
+    [[nodiscard]]
+    ListPopResult listPopRight(
+        const std::string& key
+    );
+
+    [[nodiscard]]
+    ListRangeResult listRange(
+        const std::string& key,
+        long long start,
+        long long stop
+    ) const;
+
+    [[nodiscard]]
+    ListLengthResult listLength(
+        const std::string& key
+    ) const;
 
 private:
     std::unordered_map<

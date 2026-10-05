@@ -38,6 +38,12 @@ private:
     );
 
     [[nodiscard]]
+    static bool parseDouble(
+        const std::string& text,
+        double& value
+    );
+
+    [[nodiscard]]
     static std::string executePing(
         const std::vector<std::string>& arguments
     );
@@ -108,6 +114,41 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeSAdd(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeSRem(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeSIsMember(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeSMembers(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeZAdd(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeZScore(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeZRange(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );
@@ -137,26 +178,6 @@ private:
 
     [[nodiscard]]
     static std::string encodeWrongTypeError();
-
-    [[nodiscard]]
-    std::string executeSAdd(
-        const std::vector<std::string>& arguments
-    );
-
-    [[nodiscard]]
-    std::string executeSRem(
-        const std::vector<std::string>& arguments
-    );
-
-    [[nodiscard]]
-    std::string executeSIsMember(
-        const std::vector<std::string>& arguments
-    );
-
-    [[nodiscard]]
-    std::string executeSMembers(
-        const std::vector<std::string>& arguments
-    );
 
     storage::Database& database_;
 };

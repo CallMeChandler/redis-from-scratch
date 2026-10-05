@@ -60,6 +60,21 @@ struct SetMembersResult {
     std::vector<std::string> values;
 };
 
+struct SortedSetAddResult {
+    LookupStatus status;
+    bool inserted;
+};
+
+struct SortedSetScoreResult {
+    LookupStatus status;
+    double score;
+};
+
+struct SortedSetRangeResult {
+    LookupStatus status;
+    std::vector<std::string> values;
+};
+
 class Database {
 public:
     void setString(
@@ -151,6 +166,26 @@ public:
     [[nodiscard]]
     SetMembersResult setMembers(
         const std::string& key
+    ) const;
+
+    [[nodiscard]]
+    SortedSetAddResult sortedSetAdd(
+        const std::string& key,
+        double score,
+        std::string member
+    );
+
+    [[nodiscard]]
+    SortedSetScoreResult sortedSetScore(
+        const std::string& key,
+        const std::string& member
+    ) const;
+
+    [[nodiscard]]
+    SortedSetRangeResult sortedSetRange(
+        const std::string& key,
+        long long start,
+        long long stop
     ) const;
 
 private:

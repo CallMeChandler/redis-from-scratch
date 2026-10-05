@@ -20,12 +20,19 @@ using RedisList =
 
 using RedisSet =
     std::unordered_set<std::string>;
-    
+
+using RedisSortedSet =
+    std::unordered_map<
+        std::string,
+        double
+    >;
+
 enum class RedisType {
     String,
     Hash,
     List,
-    Set
+    Set,
+    SortedSet
 };
 
 class RedisValue {
@@ -43,6 +50,10 @@ public:
     }
 
     explicit RedisValue(RedisSet value)
+        : value_(std::move(value)) {
+    }
+
+    explicit RedisValue(RedisSortedSet value)
         : value_(std::move(value)) {
     }
 
@@ -72,7 +83,23 @@ public:
             return RedisType::List;
         }
 
-        return RedisType::Set;
+        if (
+            std::holds_alternative<RedisSet>(
+                value_
+            )
+        ) {
+            return RedisType::Set;
+        }
+
+        if (
+            std::holds_alternative<RedisSortedSet>(
+                value_
+            )
+        ) {
+            return RedisType::SortedSet;
+        }
+
+        return RedisType::String;
     }
 
     [[nodiscard]]
@@ -124,12 +151,27 @@ public:
         );
     }
 
+    [[nodiscard]]
+    RedisSortedSet& asSortedSet() {
+        return std::get<RedisSortedSet>(
+            value_
+        );
+    }
+
+    [[nodiscard]]
+    const RedisSortedSet& asSortedSet() const {
+        return std::get<RedisSortedSet>(
+            value_
+        );
+    }
+
 private:
     std::variant<
         std::string,
         RedisHash,
         RedisList,
-        RedisSet
+        RedisSet,
+        RedisSortedSet
     > value_;
 };
 

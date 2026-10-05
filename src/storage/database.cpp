@@ -28,7 +28,7 @@ StringLookupResult Database::getString(
         values_.find(key);
 
     if (iterator == values_.end()) {
-        return StringLookupResult{
+        return {
             LookupStatus::Missing,
             {}
         };
@@ -38,13 +38,13 @@ StringLookupResult Database::getString(
         iterator->second.type() !=
         RedisType::String
     ) {
-        return StringLookupResult{
+        return {
             LookupStatus::WrongType,
             {}
         };
     }
 
-    return StringLookupResult{
+    return {
         LookupStatus::Found,
         iterator->second.asString()
     };
@@ -119,7 +119,7 @@ HashLookupResult Database::hashGet(
         values_.find(key);
 
     if (iterator == values_.end()) {
-        return HashLookupResult{
+        return {
             LookupStatus::Missing,
             {}
         };
@@ -129,7 +129,7 @@ HashLookupResult Database::hashGet(
         iterator->second.type() !=
         RedisType::Hash
     ) {
-        return HashLookupResult{
+        return {
             LookupStatus::WrongType,
             {}
         };
@@ -142,13 +142,13 @@ HashLookupResult Database::hashGet(
         hash.find(field);
 
     if (field_iterator == hash.end()) {
-        return HashLookupResult{
+        return {
             LookupStatus::Missing,
             {}
         };
     }
 
-    return HashLookupResult{
+    return {
         LookupStatus::Found,
         field_iterator->second
     };
@@ -163,10 +163,7 @@ ListPushResult Database::listPushLeft(
 
     if (iterator == values_.end()) {
         RedisList list;
-
-        list.push_front(
-            std::move(value)
-        );
+        list.push_front(std::move(value));
 
         values_.emplace(
             key,
@@ -175,7 +172,7 @@ ListPushResult Database::listPushLeft(
             }
         );
 
-        return ListPushResult{
+        return {
             LookupStatus::Found,
             1
         };
@@ -185,7 +182,7 @@ ListPushResult Database::listPushLeft(
         iterator->second.type() !=
         RedisType::List
     ) {
-        return ListPushResult{
+        return {
             LookupStatus::WrongType,
             0
         };
@@ -198,7 +195,7 @@ ListPushResult Database::listPushLeft(
         std::move(value)
     );
 
-    return ListPushResult{
+    return {
         LookupStatus::Found,
         list.size()
     };
@@ -213,10 +210,7 @@ ListPushResult Database::listPushRight(
 
     if (iterator == values_.end()) {
         RedisList list;
-
-        list.push_back(
-            std::move(value)
-        );
+        list.push_back(std::move(value));
 
         values_.emplace(
             key,
@@ -225,7 +219,7 @@ ListPushResult Database::listPushRight(
             }
         );
 
-        return ListPushResult{
+        return {
             LookupStatus::Found,
             1
         };
@@ -235,7 +229,7 @@ ListPushResult Database::listPushRight(
         iterator->second.type() !=
         RedisType::List
     ) {
-        return ListPushResult{
+        return {
             LookupStatus::WrongType,
             0
         };
@@ -248,7 +242,7 @@ ListPushResult Database::listPushRight(
         std::move(value)
     );
 
-    return ListPushResult{
+    return {
         LookupStatus::Found,
         list.size()
     };
@@ -261,7 +255,7 @@ ListPopResult Database::listPopLeft(
         values_.find(key);
 
     if (iterator == values_.end()) {
-        return ListPopResult{
+        return {
             LookupStatus::Missing,
             {}
         };
@@ -271,7 +265,7 @@ ListPopResult Database::listPopLeft(
         iterator->second.type() !=
         RedisType::List
     ) {
-        return ListPopResult{
+        return {
             LookupStatus::WrongType,
             {}
         };
@@ -279,15 +273,6 @@ ListPopResult Database::listPopLeft(
 
     RedisList& list =
         iterator->second.asList();
-
-    if (list.empty()) {
-        values_.erase(iterator);
-
-        return ListPopResult{
-            LookupStatus::Missing,
-            {}
-        };
-    }
 
     std::string value =
         std::move(list.front());
@@ -298,7 +283,7 @@ ListPopResult Database::listPopLeft(
         values_.erase(iterator);
     }
 
-    return ListPopResult{
+    return {
         LookupStatus::Found,
         std::move(value)
     };
@@ -311,7 +296,7 @@ ListPopResult Database::listPopRight(
         values_.find(key);
 
     if (iterator == values_.end()) {
-        return ListPopResult{
+        return {
             LookupStatus::Missing,
             {}
         };
@@ -321,7 +306,7 @@ ListPopResult Database::listPopRight(
         iterator->second.type() !=
         RedisType::List
     ) {
-        return ListPopResult{
+        return {
             LookupStatus::WrongType,
             {}
         };
@@ -329,15 +314,6 @@ ListPopResult Database::listPopRight(
 
     RedisList& list =
         iterator->second.asList();
-
-    if (list.empty()) {
-        values_.erase(iterator);
-
-        return ListPopResult{
-            LookupStatus::Missing,
-            {}
-        };
-    }
 
     std::string value =
         std::move(list.back());
@@ -348,7 +324,7 @@ ListPopResult Database::listPopRight(
         values_.erase(iterator);
     }
 
-    return ListPopResult{
+    return {
         LookupStatus::Found,
         std::move(value)
     };
@@ -363,7 +339,7 @@ ListRangeResult Database::listRange(
         values_.find(key);
 
     if (iterator == values_.end()) {
-        return ListRangeResult{
+        return {
             LookupStatus::Missing,
             {}
         };
@@ -373,7 +349,7 @@ ListRangeResult Database::listRange(
         iterator->second.type() !=
         RedisType::List
     ) {
-        return ListRangeResult{
+        return {
             LookupStatus::WrongType,
             {}
         };
@@ -386,13 +362,6 @@ ListRangeResult Database::listRange(
         static_cast<long long>(
             list.size()
         );
-
-    if (length == 0) {
-        return ListRangeResult{
-            LookupStatus::Found,
-            {}
-        };
-    }
 
     if (start < 0) {
         start = length + start;
@@ -413,23 +382,18 @@ ListRangeResult Database::listRange(
     );
 
     if (
+        length == 0 ||
         start >= length ||
         stop < 0 ||
         start > stop
     ) {
-        return ListRangeResult{
+        return {
             LookupStatus::Found,
             {}
         };
     }
 
     std::vector<std::string> result;
-
-    result.reserve(
-        static_cast<std::size_t>(
-            stop - start + 1
-        )
-    );
 
     for (
         long long index = start;
@@ -445,7 +409,7 @@ ListRangeResult Database::listRange(
         );
     }
 
-    return ListRangeResult{
+    return {
         LookupStatus::Found,
         std::move(result)
     };
@@ -458,7 +422,7 @@ ListLengthResult Database::listLength(
         values_.find(key);
 
     if (iterator == values_.end()) {
-        return ListLengthResult{
+        return {
             LookupStatus::Missing,
             0
         };
@@ -468,17 +432,15 @@ ListLengthResult Database::listLength(
         iterator->second.type() !=
         RedisType::List
     ) {
-        return ListLengthResult{
+        return {
             LookupStatus::WrongType,
             0
         };
     }
 
-    return ListLengthResult{
+    return {
         LookupStatus::Found,
-        iterator->second
-            .asList()
-            .size()
+        iterator->second.asList().size()
     };
 }
 
@@ -489,12 +451,9 @@ SetMutationResult Database::setAdd(
     auto iterator =
         values_.find(key);
 
-    if (iterator==values_.end()){
+    if (iterator == values_.end()) {
         RedisSet set;
-
-        set.insert(
-            std::move(member)
-        );
+        set.insert(std::move(member));
 
         values_.emplace(
             key,
@@ -503,7 +462,17 @@ SetMutationResult Database::setAdd(
             }
         );
 
-        return SetMutationResult{
+        return {
+            LookupStatus::Found,
+            true
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::Set
+    ) {
+        return {
             LookupStatus::WrongType,
             false
         };
@@ -517,7 +486,7 @@ SetMutationResult Database::setAdd(
             std::move(member)
         );
 
-    return SetMutationResult{
+    return {
         LookupStatus::Found,
         result.second
     };
@@ -530,8 +499,8 @@ SetMutationResult Database::setRemove(
     auto iterator =
         values_.find(key);
 
-    if (iterator==values_.end()){
-        return SetMutationResult{
+    if (iterator == values_.end()) {
+        return {
             LookupStatus::Missing,
             false
         };
@@ -541,7 +510,7 @@ SetMutationResult Database::setRemove(
         iterator->second.type() !=
         RedisType::Set
     ) {
-        return SetMutationResult{
+        return {
             LookupStatus::WrongType,
             false
         };
@@ -557,7 +526,7 @@ SetMutationResult Database::setRemove(
         values_.erase(iterator);
     }
 
-    return SetMutationResult{
+    return {
         LookupStatus::Found,
         removed
     };
@@ -570,17 +539,18 @@ SetMembershipResult Database::setContains(
     const auto iterator =
         values_.find(key);
 
-    if (iterator == values_.end()){
-        return SetMembershipResult{
+    if (iterator == values_.end()) {
+        return {
             LookupStatus::Missing,
             false
         };
     }
 
     if (
-        iterator->second.type() != RedisType::Set
+        iterator->second.type() !=
+        RedisType::Set
     ) {
-        return SetMembershipResult{
+        return {
             LookupStatus::WrongType,
             false
         };
@@ -589,10 +559,9 @@ SetMembershipResult Database::setContains(
     const RedisSet& set =
         iterator->second.asSet();
 
-    return SetMembershipResult{
+    return {
         LookupStatus::Found,
-        set.find(member) !=
-            set.end()
+        set.find(member) != set.end()
     };
 }
 
@@ -602,8 +571,8 @@ SetMembersResult Database::setMembers(
     const auto iterator =
         values_.find(key);
 
-    if (iterator==values_.end()){
-        return SetMembersResult{
+    if (iterator == values_.end()) {
+        return {
             LookupStatus::Missing,
             {}
         };
@@ -613,7 +582,7 @@ SetMembersResult Database::setMembers(
         iterator->second.type() !=
         RedisType::Set
     ) {
-        return SetMembersResult{
+        return {
             LookupStatus::WrongType,
             {}
         };
@@ -622,24 +591,245 @@ SetMembersResult Database::setMembers(
     const RedisSet& set =
         iterator->second.asSet();
 
-    std::vector<std::string> values;
+    std::vector<std::string> result;
 
-    values.reserve(
-        set.size()
-    );
+    result.reserve(set.size());
 
     for (
         const std::string& member :
         set
     ) {
-        values.push_back(
-            member
+        result.push_back(member);
+    }
+
+    return {
+        LookupStatus::Found,
+        std::move(result)
+    };
+}
+
+SortedSetAddResult Database::sortedSetAdd(
+    const std::string& key,
+    double score,
+    std::string member
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        RedisSortedSet sorted_set;
+
+        sorted_set.emplace(
+            std::move(member),
+            score
+        );
+
+        values_.emplace(
+            key,
+            RedisValue{
+                std::move(sorted_set)
+            }
+        );
+
+        return {
+            LookupStatus::Found,
+            true
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::SortedSet
+    ) {
+        return {
+            LookupStatus::WrongType,
+            false
+        };
+    }
+
+    RedisSortedSet& sorted_set =
+        iterator->second.asSortedSet();
+
+    const auto existing =
+        sorted_set.find(member);
+
+    const bool inserted =
+        existing == sorted_set.end();
+
+    sorted_set.insert_or_assign(
+        std::move(member),
+        score
+    );
+
+    return {
+        LookupStatus::Found,
+        inserted
+    };
+}
+
+SortedSetScoreResult Database::sortedSetScore(
+    const std::string& key,
+    const std::string& member
+) const {
+    const auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        return {
+            LookupStatus::Missing,
+            0.0
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::SortedSet
+    ) {
+        return {
+            LookupStatus::WrongType,
+            0.0
+        };
+    }
+
+    const RedisSortedSet& sorted_set =
+        iterator->second.asSortedSet();
+
+    const auto member_iterator =
+        sorted_set.find(member);
+
+    if (
+        member_iterator ==
+        sorted_set.end()
+    ) {
+        return {
+            LookupStatus::Missing,
+            0.0
+        };
+    }
+
+    return {
+        LookupStatus::Found,
+        member_iterator->second
+    };
+}
+
+SortedSetRangeResult Database::sortedSetRange(
+    const std::string& key,
+    long long start,
+    long long stop
+) const {
+    const auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::SortedSet
+    ) {
+        return {
+            LookupStatus::WrongType,
+            {}
+        };
+    }
+
+    const RedisSortedSet& sorted_set =
+        iterator->second.asSortedSet();
+
+    std::vector<
+        std::pair<std::string, double>
+    > ordered;
+
+    ordered.reserve(
+        sorted_set.size()
+    );
+
+    for (
+        const auto& entry :
+        sorted_set
+    ) {
+        ordered.push_back(entry);
+    }
+
+    std::sort(
+        ordered.begin(),
+        ordered.end(),
+        [](
+            const auto& left,
+            const auto& right
+        ) {
+            if (
+                left.second ==
+                right.second
+            ) {
+                return left.first <
+                       right.first;
+            }
+
+            return left.second <
+                   right.second;
+        }
+    );
+
+    const long long length =
+        static_cast<long long>(
+            ordered.size()
+        );
+
+    if (start < 0) {
+        start = length + start;
+    }
+
+    if (stop < 0) {
+        stop = length + stop;
+    }
+
+    start = std::max(
+        0LL,
+        start
+    );
+
+    stop = std::min(
+        length - 1,
+        stop
+    );
+
+    if (
+        length == 0 ||
+        start >= length ||
+        stop < 0 ||
+        start > stop
+    ) {
+        return {
+            LookupStatus::Found,
+            {}
+        };
+    }
+
+    std::vector<std::string> result;
+
+    for (
+        long long index = start;
+        index <= stop;
+        ++index
+    ) {
+        result.push_back(
+            ordered[
+                static_cast<std::size_t>(
+                    index
+                )
+            ].first
         );
     }
 
-    return SetMembersResult{
+    return {
         LookupStatus::Found,
-        std::move(values)
+        std::move(result)
     };
 }
 

@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <charconv>
 #include <cctype>
+#include <cstdlib>
 #include <string>
 #include <variant>
 #include <vector>
@@ -107,6 +108,18 @@ std::string CommandHandler::execute(
         return executeSMembers(arguments);
     }
 
+    if (command == "ZADD") {
+        return executeZAdd(arguments);
+    }
+
+    if (command == "ZSCORE") {
+        return executeZScore(arguments);
+    }
+
+    if (command == "ZRANGE") {
+        return executeZRange(arguments);
+    }
+
     return encodeError(
         "ERR unknown command '" +
         arguments[0] +
@@ -128,38 +141,33 @@ bool CommandHandler::extractArguments(
     }
 
     arguments.clear();
-
-    arguments.reserve(
-        array->size()
-    );
+    arguments.reserve(array->size());
 
     for (
         const protocol::RespValue& element :
         *array
     ) {
-        const protocol::BulkString* bulk_string =
+        const protocol::BulkString* bulk =
             std::get_if<protocol::BulkString>(
                 &element.value
             );
 
-        if (bulk_string != nullptr) {
+        if (bulk != nullptr) {
             arguments.push_back(
-                bulk_string->value
+                bulk->value
             );
-
             continue;
         }
 
-        const protocol::SimpleString* simple_string =
+        const protocol::SimpleString* simple =
             std::get_if<protocol::SimpleString>(
                 &element.value
             );
 
-        if (simple_string != nullptr) {
+        if (simple != nullptr) {
             arguments.push_back(
-                simple_string->value
+                simple->value
             );
-
             continue;
         }
 
@@ -190,16 +198,9 @@ bool CommandHandler::parseInteger(
     const std::string& text,
     long long& value
 ) {
-    if (text.empty()) {
-        return false;
-    }
-
-    const char* begin =
-        text.data();
-
+    const char* begin = text.data();
     const char* end =
-        text.data() +
-        text.size();
+        text.data() + text.size();
 
     const auto result =
         std::from_chars(
@@ -208,18 +209,32 @@ bool CommandHandler::parseInteger(
             value
         );
 
-    return result.ec ==
-               std::errc{} &&
+    return result.ec == std::errc{} &&
            result.ptr == end;
+}
+
+bool CommandHandler::parseDouble(
+    const std::string& text,
+    double& value
+) {
+    char* end_pointer = nullptr;
+
+    value =
+        std::strtod(
+            text.c_str(),
+            &end_pointer
+        );
+
+    return end_pointer !=
+               text.c_str() &&
+           *end_pointer == '\0';
 }
 
 std::string CommandHandler::executePing(
     const std::vector<std::string>& arguments
 ) {
     if (arguments.size() == 1) {
-        return encodeSimpleString(
-            "PONG"
-        );
+        return encodeSimpleString("PONG");
     }
 
     if (arguments.size() == 2) {
@@ -261,9 +276,7 @@ std::string CommandHandler::executeSet(
         arguments[2]
     );
 
-    return encodeSimpleString(
-        "OK"
-    );
+    return encodeSimpleString("OK");
 }
 
 std::string CommandHandler::executeGet(
@@ -308,7 +321,7 @@ std::string CommandHandler::executeExists(
         );
     }
 
-    long long existing_keys = 0;
+    long long count = 0;
 
     for (
         std::size_t index = 1;
@@ -320,13 +333,11 @@ std::string CommandHandler::executeExists(
                 arguments[index]
             )
         ) {
-            ++existing_keys;
+            ++count;
         }
     }
 
-    return encodeInteger(
-        existing_keys
-    );
+    return encodeInteger(count);
 }
 
 std::string CommandHandler::executeDel(
@@ -338,7 +349,7 @@ std::string CommandHandler::executeDel(
         );
     }
 
-    long long deleted_keys = 0;
+    long long count = 0;
 
     for (
         std::size_t index = 1;
@@ -350,13 +361,11 @@ std::string CommandHandler::executeDel(
                 arguments[index]
             )
         ) {
-            ++deleted_keys;
+            ++count;
         }
     }
 
-    return encodeInteger(
-        deleted_keys
-    );
+    return encodeInteger(count);
 }
 
 std::string CommandHandler::executeHSet(
@@ -368,14 +377,13 @@ std::string CommandHandler::executeHSet(
         );
     }
 
-    const bool success =
-        database_.hashSet(
+    if (
+        !database_.hashSet(
             arguments[1],
             arguments[2],
             arguments[3]
-        );
-
-    if (!success) {
+        )
+    ) {
         return encodeWrongTypeError();
     }
 
@@ -425,7 +433,7 @@ std::string CommandHandler::executeLPush(
         );
     }
 
-    const storage::ListPushResult result =
+    const auto result =
         database_.listPushLeft(
             arguments[1],
             arguments[2]
@@ -454,7 +462,7 @@ std::string CommandHandler::executeRPush(
         );
     }
 
-    const storage::ListPushResult result =
+    const auto result =
         database_.listPushRight(
             arguments[1],
             arguments[2]
@@ -483,7 +491,7 @@ std::string CommandHandler::executeLPop(
         );
     }
 
-    const storage::ListPopResult result =
+    const auto result =
         database_.listPopLeft(
             arguments[1]
         );
@@ -516,7 +524,7 @@ std::string CommandHandler::executeRPop(
         );
     }
 
-    const storage::ListPopResult result =
+    const auto result =
         database_.listPopRight(
             arguments[1]
         );
@@ -553,21 +561,15 @@ std::string CommandHandler::executeLRange(
     long long stop = 0;
 
     if (
-        !parseInteger(
-            arguments[2],
-            start
-        ) ||
-        !parseInteger(
-            arguments[3],
-            stop
-        )
+        !parseInteger(arguments[2], start) ||
+        !parseInteger(arguments[3], stop)
     ) {
         return encodeError(
             "ERR value is not an integer or out of range"
         );
     }
 
-    const storage::ListRangeResult result =
+    const auto result =
         database_.listRange(
             arguments[1],
             start,
@@ -595,7 +597,7 @@ std::string CommandHandler::executeLLen(
         );
     }
 
-    const storage::ListLengthResult result =
+    const auto result =
         database_.listLength(
             arguments[1]
         );
@@ -623,7 +625,7 @@ std::string CommandHandler::executeSAdd(
         );
     }
 
-    const storage::SetMutationResult result =
+    const auto result =
         database_.setAdd(
             arguments[1],
             arguments[2]
@@ -650,7 +652,7 @@ std::string CommandHandler::executeSRem(
         );
     }
 
-    const storage::SetMutationResult result =
+    const auto result =
         database_.setRemove(
             arguments[1],
             arguments[2]
@@ -677,7 +679,7 @@ std::string CommandHandler::executeSIsMember(
         );
     }
 
-    const storage::SetMembershipResult result =
+    const auto result =
         database_.setContains(
             arguments[1],
             arguments[2]
@@ -704,9 +706,132 @@ std::string CommandHandler::executeSMembers(
         );
     }
 
-    const storage::SetMembersResult result =
+    const auto result =
         database_.setMembers(
             arguments[1]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeArray(
+        result.values
+    );
+}
+
+std::string CommandHandler::executeZAdd(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 4) {
+        return encodeError(
+            "ERR wrong number of arguments for 'zadd' command"
+        );
+    }
+
+    double score = 0.0;
+
+    if (
+        !parseDouble(
+            arguments[2],
+            score
+        )
+    ) {
+        return encodeError(
+            "ERR value is not a valid float"
+        );
+    }
+
+    const auto result =
+        database_.sortedSetAdd(
+            arguments[1],
+            score,
+            arguments[3]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        result.inserted ? 1 : 0
+    );
+}
+
+std::string CommandHandler::executeZScore(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'zscore' command"
+        );
+    }
+
+    const auto result =
+        database_.sortedSetScore(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    if (
+        result.status ==
+        storage::LookupStatus::Missing
+    ) {
+        return encodeNullBulkString();
+    }
+
+    return encodeBulkString(
+        std::to_string(
+            result.score
+        )
+    );
+}
+
+std::string CommandHandler::executeZRange(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 4) {
+        return encodeError(
+            "ERR wrong number of arguments for 'zrange' command"
+        );
+    }
+
+    long long start = 0;
+    long long stop = 0;
+
+    if (
+        !parseInteger(
+            arguments[2],
+            start
+        ) ||
+        !parseInteger(
+            arguments[3],
+            stop
+        )
+    ) {
+        return encodeError(
+            "ERR value is not an integer or out of range"
+        );
+    }
+
+    const auto result =
+        database_.sortedSetRange(
+            arguments[1],
+            start,
+            stop
         );
 
     if (
@@ -733,9 +858,7 @@ std::string CommandHandler::encodeBulkString(
     const std::string& value
 ) {
     return "$" +
-           std::to_string(
-               value.size()
-           ) +
+           std::to_string(value.size()) +
            "\r\n" +
            value +
            "\r\n";
@@ -758,9 +881,7 @@ std::string CommandHandler::encodeArray(
 ) {
     std::string output =
         "*" +
-        std::to_string(
-            values.size()
-        ) +
+        std::to_string(values.size()) +
         "\r\n";
 
     for (
@@ -768,9 +889,7 @@ std::string CommandHandler::encodeArray(
         values
     ) {
         output +=
-            encodeBulkString(
-                value
-            );
+            encodeBulkString(value);
     }
 
     return output;

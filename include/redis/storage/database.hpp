@@ -45,6 +45,21 @@ struct ListLengthResult {
     std::size_t length;
 };
 
+struct SetMutationResult {
+    LookupStatus status;
+    bool changed;
+};
+
+struct SetMembershipResult {
+    LookupStatus status;
+    bool is_member;
+};
+
+struct SetMembersResult {
+    LookupStatus status;
+    std::vector<std::string> values;
+};
+
 class Database {
 public:
     void setString(
@@ -112,6 +127,29 @@ public:
 
     [[nodiscard]]
     ListLengthResult listLength(
+        const std::string& key
+    ) const;
+
+    [[nodiscard]]
+    SetMutationResult setAdd(
+        const std::string& key,
+        std::string member
+    );
+
+    [[nodiscard]]
+    SetMutationResult setRemove(
+        const std::string& key,
+        const std::string& member
+    );
+
+    [[nodiscard]]
+    SetMembershipResult setContains(
+        const std::string& key,
+        const std::string& member
+    ) const;
+
+    [[nodiscard]]
+    SetMembersResult setMembers(
         const std::string& key
     ) const;
 

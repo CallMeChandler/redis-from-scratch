@@ -482,4 +482,165 @@ ListLengthResult Database::listLength(
     };
 }
 
+SetMutationResult Database::setAdd(
+    const std::string& key,
+    std::string member
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator==values_.end()){
+        RedisSet set;
+
+        set.insert(
+            std::move(member)
+        );
+
+        values_.emplace(
+            key,
+            RedisValue{
+                std::move(set)
+            }
+        );
+
+        return SetMutationResult{
+            LookupStatus::WrongType,
+            false
+        };
+    }
+
+    RedisSet& set =
+        iterator->second.asSet();
+
+    const auto result =
+        set.insert(
+            std::move(member)
+        );
+
+    return SetMutationResult{
+        LookupStatus::Found,
+        result.second
+    };
+}
+
+SetMutationResult Database::setRemove(
+    const std::string& key,
+    const std::string& member
+) {
+    auto iterator =
+        values_.find(key);
+
+    if (iterator==values_.end()){
+        return SetMutationResult{
+            LookupStatus::Missing,
+            false
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::Set
+    ) {
+        return SetMutationResult{
+            LookupStatus::WrongType,
+            false
+        };
+    }
+
+    RedisSet& set =
+        iterator->second.asSet();
+
+    const bool removed =
+        set.erase(member) > 0;
+
+    if (set.empty()) {
+        values_.erase(iterator);
+    }
+
+    return SetMutationResult{
+        LookupStatus::Found,
+        removed
+    };
+}
+
+SetMembershipResult Database::setContains(
+    const std::string& key,
+    const std::string& member
+) const {
+    const auto iterator =
+        values_.find(key);
+
+    if (iterator == values_.end()){
+        return SetMembershipResult{
+            LookupStatus::Missing,
+            false
+        };
+    }
+
+    if (
+        iterator->second.type() != RedisType::Set
+    ) {
+        return SetMembershipResult{
+            LookupStatus::WrongType,
+            false
+        };
+    }
+
+    const RedisSet& set =
+        iterator->second.asSet();
+
+    return SetMembershipResult{
+        LookupStatus::Found,
+        set.find(member) !=
+            set.end()
+    };
+}
+
+SetMembersResult Database::setMembers(
+    const std::string& key
+) const {
+    const auto iterator =
+        values_.find(key);
+
+    if (iterator==values_.end()){
+        return SetMembersResult{
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
+    if (
+        iterator->second.type() !=
+        RedisType::Set
+    ) {
+        return SetMembersResult{
+            LookupStatus::WrongType,
+            {}
+        };
+    }
+
+    const RedisSet& set =
+        iterator->second.asSet();
+
+    std::vector<std::string> values;
+
+    values.reserve(
+        set.size()
+    );
+
+    for (
+        const std::string& member :
+        set
+    ) {
+        values.push_back(
+            member
+        );
+    }
+
+    return SetMembersResult{
+        LookupStatus::Found,
+        std::move(values)
+    };
+}
+
 }  // namespace redis::storage

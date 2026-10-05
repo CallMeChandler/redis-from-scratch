@@ -138,6 +138,26 @@ private:
     [[nodiscard]]
     static std::string encodeWrongTypeError();
 
+    [[nodiscard]]
+    std::string executeSAdd(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeSRem(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeSIsMember(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeSMembers(
+        const std::vector<std::string>& arguments
+    );
+
     storage::Database& database_;
 };
 

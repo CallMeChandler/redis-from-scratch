@@ -3,6 +3,7 @@
 #include <deque>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <variant>
 
@@ -17,10 +18,14 @@ using RedisHash =
 using RedisList =
     std::deque<std::string>;
 
+using RedisSet =
+    std::unordered_set<std::string>;
+    
 enum class RedisType {
     String,
     Hash,
-    List
+    List,
+    Set
 };
 
 class RedisValue {
@@ -34,6 +39,10 @@ public:
     }
 
     explicit RedisValue(RedisList value)
+        : value_(std::move(value)) {
+    }
+
+    explicit RedisValue(RedisSet value)
         : value_(std::move(value)) {
     }
 
@@ -55,7 +64,15 @@ public:
             return RedisType::Hash;
         }
 
-        return RedisType::List;
+        if (
+            std::holds_alternative<RedisList>(
+                value_
+            )
+        ) {
+            return RedisType::List;
+        }
+
+        return RedisType::Set;
     }
 
     [[nodiscard]]
@@ -93,11 +110,26 @@ public:
         );
     }
 
+    [[nodiscard]]
+    RedisSet& asSet() {
+        return std::get<RedisSet>(
+            value_
+        );
+    }
+
+    [[nodiscard]]
+    const RedisSet& asSet() const {
+        return std::get<RedisSet>(
+            value_
+        );
+    }
+
 private:
     std::variant<
         std::string,
         RedisHash,
-        RedisList
+        RedisList,
+        RedisSet
     > value_;
 };
 

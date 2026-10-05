@@ -91,6 +91,22 @@ std::string CommandHandler::execute(
         return executeLLen(arguments);
     }
 
+    if (command == "SADD") {
+        return executeSAdd(arguments);
+    }
+
+    if (command == "SREM") {
+        return executeSRem(arguments);
+    }
+
+    if (command == "SISMEMBER") {
+        return executeSIsMember(arguments);
+    }
+
+    if (command == "SMEMBERS") {
+        return executeSMembers(arguments);
+    }
+
     return encodeError(
         "ERR unknown command '" +
         arguments[0] +
@@ -595,6 +611,113 @@ std::string CommandHandler::executeLLen(
         static_cast<long long>(
             result.length
         )
+    );
+}
+
+std::string CommandHandler::executeSAdd(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'sadd' command"
+        );
+    }
+
+    const storage::SetMutationResult result =
+        database_.setAdd(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        result.changed ? 1 : 0
+    );
+}
+
+std::string CommandHandler::executeSRem(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'srem' command"
+        );
+    }
+
+    const storage::SetMutationResult result =
+        database_.setRemove(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        result.changed ? 1 : 0
+    );
+}
+
+std::string CommandHandler::executeSIsMember(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'sismember' command"
+        );
+    }
+
+    const storage::SetMembershipResult result =
+        database_.setContains(
+            arguments[1],
+            arguments[2]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeInteger(
+        result.is_member ? 1 : 0
+    );
+}
+
+std::string CommandHandler::executeSMembers(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'smembers' command"
+        );
+    }
+
+    const storage::SetMembersResult result =
+        database_.setMembers(
+            arguments[1]
+        );
+
+    if (
+        result.status ==
+        storage::LookupStatus::WrongType
+    ) {
+        return encodeWrongTypeError();
+    }
+
+    return encodeArray(
+        result.values
     );
 }
 

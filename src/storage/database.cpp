@@ -1059,6 +1059,54 @@ long long Database::ttl(
     return remaining;
 }
 
+std::size_t Database::activeExpireCycle(
+    std::size_t max_keys
+) {
+    if (
+        max_keys == 0 ||
+        expirations_.empty()
+    ) {
+        return 0;
+    }
+
+    const auto now =
+        Clock::now();
+
+    std::size_t checked = 0;
+    std::size_t removed = 0;
+
+    auto iterator =
+        expirations_.begin();
+
+    while(
+        iterator != expirations_.end() &&
+        checked < max_keys
+    ) {
+        ++checked;
+
+        if (
+            now >= iterator->second
+        ) {
+            values_.erase(
+                iterator->first
+            );
+
+            iterator =
+                expirations_.erase(
+                    iterator
+                );
+
+            ++removed;
+
+            continue;
+        }
+
+        ++iterator;
+    }
+
+    return removed;
+}
+
 bool Database::removeIfExpired(
     const std::string& key
 ) {

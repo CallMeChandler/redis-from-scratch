@@ -199,6 +199,10 @@ public:
         const std::string& key
     );
 
+    std::size_t activeExpireCycle(
+        std::size_t max_keys
+    );
+
 private:
     using Clock =
         std::chrono::steady_clock;

@@ -1,8 +1,10 @@
 #include "redis/net/tcp_server.hpp"
 
 #include <arpa/inet.h>
+#include <array>
 #include <cerrno>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 #include <memory>
@@ -154,15 +156,26 @@ void TcpServer::registerServerSocket() {
 }
 
 void TcpServer::runEventLoop() {
-    epoll_event events[kMaxEvents]{};
+    constexpr int kMaxEvents = 64;
+
+    constexpr int kEpollTimeoutMilliseconds =
+        100;
+
+    constexpr std::size_t kExpirationBatchSize =
+        64;
+
+    std::array<
+        epoll_event,
+        kMaxEvents
+    > events{};
 
     while (true) {
         const int ready_count =
             ::epoll_wait(
                 epoll_fd_,
-                events,
+                events.data(),
                 kMaxEvents,
-                -1
+                kEpollTimeoutMilliseconds
             );
 
         if (ready_count == -1) {
@@ -170,8 +183,8 @@ void TcpServer::runEventLoop() {
                 continue;
             }
 
-            throw makeSystemError(
-                "epoll_wait"
+            throw std::runtime_error(
+                "epoll_wait failed"
             );
         }
 
@@ -180,22 +193,29 @@ void TcpServer::runEventLoop() {
             index < ready_count;
             ++index
         ) {
-            const int ready_fd =
+            const int file_descriptor =
                 events[index].data.fd;
 
             const std::uint32_t event_flags =
                 events[index].events;
 
-            if (ready_fd == server_fd_) {
+            if (
+                file_descriptor ==
+                server_fd_
+            ) {
                 handleNewConnection();
                 continue;
             }
 
             handleClientEvent(
-                ready_fd,
+                file_descriptor,
                 event_flags
             );
         }
+
+        database_.activeExpireCycle(
+            kExpirationBatchSize
+        );
     }
 }
 

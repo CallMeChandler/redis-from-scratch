@@ -120,6 +120,14 @@ std::string CommandHandler::execute(
         return executeZRange(arguments);
     }
 
+    if (command == "EXPIRE") {
+        return executeExpire(arguments);
+    }
+
+    if (command == "TTL") {
+        return executeTTL(arguments);
+    }
+
     return encodeError(
         "ERR unknown command '" +
         arguments[0] +
@@ -843,6 +851,55 @@ std::string CommandHandler::executeZRange(
 
     return encodeArray(
         result.values
+    );
+}
+
+std::string CommandHandler::executeExpire(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'expire' command"
+        );
+    }
+
+    long long seconds = 0;
+
+    if (
+        !parseInteger(
+            arguments[2],
+            seconds
+        )
+    ) {
+        return encodeError(
+            "ERR value is not an integer or out of range"
+        );
+    }
+
+    const bool success =
+        database_.expire(
+            arguments[1],
+            seconds
+        );
+
+    return encodeInteger(
+        success ? 1 : 0
+    );
+}
+
+std::string CommandHandler::executeTTL(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 2) {
+        return encodeError(
+            "ERR wrong number of arguments for 'ttl' command"
+        );
+    }
+
+    return encodeInteger(
+        database_.ttl(
+            arguments[1]
+        )
     );
 }
 

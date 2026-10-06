@@ -1,6 +1,7 @@
 #include "redis/storage/database.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <utility>
 #include <vector>
@@ -11,19 +12,30 @@ void Database::setString(
     std::string key,
     std::string value
 ) {
+    removeIfExpired(key);
+
     RedisValue redis_value(
         std::move(value)
     );
 
     values_.insert_or_assign(
-        std::move(key),
+        key,
         std::move(redis_value)
     );
+
+    removeExpiration(key);
 }
 
 StringLookupResult Database::getString(
     const std::string& key
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -52,7 +64,9 @@ StringLookupResult Database::getString(
 
 bool Database::exists(
     const std::string& key
-) const {
+) {
+    removeIfExpired(key);
+
     return values_.find(key) !=
            values_.end();
 }
@@ -60,10 +74,29 @@ bool Database::exists(
 bool Database::erase(
     const std::string& key
 ) {
-    return values_.erase(key) > 0;
+    removeIfExpired(key);
+
+    const bool removed =
+        values_.erase(key) > 0;
+
+    removeExpiration(key);
+
+    return removed;
 }
 
-std::size_t Database::size() const noexcept {
+std::size_t Database::size() {
+    for (
+        auto iterator = expirations_.begin();
+        iterator != expirations_.end();
+    ) {
+        const std::string key =
+            iterator->first;
+
+        ++iterator;
+
+        removeIfExpired(key);
+    }
+
     return values_.size();
 }
 
@@ -72,6 +105,8 @@ bool Database::hashSet(
     std::string field,
     std::string value
 ) {
+    removeIfExpired(key);
+
     auto iterator =
         values_.find(key);
 
@@ -114,7 +149,14 @@ bool Database::hashSet(
 HashLookupResult Database::hashGet(
     const std::string& key,
     const std::string& field
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -141,7 +183,10 @@ HashLookupResult Database::hashGet(
     const auto field_iterator =
         hash.find(field);
 
-    if (field_iterator == hash.end()) {
+    if (
+        field_iterator ==
+        hash.end()
+    ) {
         return {
             LookupStatus::Missing,
             {}
@@ -158,12 +203,17 @@ ListPushResult Database::listPushLeft(
     const std::string& key,
     std::string value
 ) {
+    removeIfExpired(key);
+
     auto iterator =
         values_.find(key);
 
     if (iterator == values_.end()) {
         RedisList list;
-        list.push_front(std::move(value));
+
+        list.push_front(
+            std::move(value)
+        );
 
         values_.emplace(
             key,
@@ -205,12 +255,17 @@ ListPushResult Database::listPushRight(
     const std::string& key,
     std::string value
 ) {
+    removeIfExpired(key);
+
     auto iterator =
         values_.find(key);
 
     if (iterator == values_.end()) {
         RedisList list;
-        list.push_back(std::move(value));
+
+        list.push_back(
+            std::move(value)
+        );
 
         values_.emplace(
             key,
@@ -251,6 +306,13 @@ ListPushResult Database::listPushRight(
 ListPopResult Database::listPopLeft(
     const std::string& key
 ) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     auto iterator =
         values_.find(key);
 
@@ -281,6 +343,7 @@ ListPopResult Database::listPopLeft(
 
     if (list.empty()) {
         values_.erase(iterator);
+        removeExpiration(key);
     }
 
     return {
@@ -292,6 +355,13 @@ ListPopResult Database::listPopLeft(
 ListPopResult Database::listPopRight(
     const std::string& key
 ) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     auto iterator =
         values_.find(key);
 
@@ -322,6 +392,7 @@ ListPopResult Database::listPopRight(
 
     if (list.empty()) {
         values_.erase(iterator);
+        removeExpiration(key);
     }
 
     return {
@@ -334,7 +405,14 @@ ListRangeResult Database::listRange(
     const std::string& key,
     long long start,
     long long stop
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -363,6 +441,13 @@ ListRangeResult Database::listRange(
             list.size()
         );
 
+    if (length == 0) {
+        return {
+            LookupStatus::Found,
+            {}
+        };
+    }
+
     if (start < 0) {
         start = length + start;
     }
@@ -382,7 +467,6 @@ ListRangeResult Database::listRange(
     );
 
     if (
-        length == 0 ||
         start >= length ||
         stop < 0 ||
         start > stop
@@ -394,6 +478,12 @@ ListRangeResult Database::listRange(
     }
 
     std::vector<std::string> result;
+
+    result.reserve(
+        static_cast<std::size_t>(
+            stop - start + 1
+        )
+    );
 
     for (
         long long index = start;
@@ -417,7 +507,14 @@ ListRangeResult Database::listRange(
 
 ListLengthResult Database::listLength(
     const std::string& key
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            0
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -448,12 +545,17 @@ SetMutationResult Database::setAdd(
     const std::string& key,
     std::string member
 ) {
+    removeIfExpired(key);
+
     auto iterator =
         values_.find(key);
 
     if (iterator == values_.end()) {
         RedisSet set;
-        set.insert(std::move(member));
+
+        set.insert(
+            std::move(member)
+        );
 
         values_.emplace(
             key,
@@ -496,6 +598,13 @@ SetMutationResult Database::setRemove(
     const std::string& key,
     const std::string& member
 ) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            false
+        };
+    }
+
     auto iterator =
         values_.find(key);
 
@@ -524,6 +633,7 @@ SetMutationResult Database::setRemove(
 
     if (set.empty()) {
         values_.erase(iterator);
+        removeExpiration(key);
     }
 
     return {
@@ -535,7 +645,14 @@ SetMutationResult Database::setRemove(
 SetMembershipResult Database::setContains(
     const std::string& key,
     const std::string& member
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            false
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -561,13 +678,21 @@ SetMembershipResult Database::setContains(
 
     return {
         LookupStatus::Found,
-        set.find(member) != set.end()
+        set.find(member) !=
+            set.end()
     };
 }
 
 SetMembersResult Database::setMembers(
     const std::string& key
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -593,13 +718,17 @@ SetMembersResult Database::setMembers(
 
     std::vector<std::string> result;
 
-    result.reserve(set.size());
+    result.reserve(
+        set.size()
+    );
 
     for (
         const std::string& member :
         set
     ) {
-        result.push_back(member);
+        result.push_back(
+            member
+        );
     }
 
     return {
@@ -613,6 +742,8 @@ SortedSetAddResult Database::sortedSetAdd(
     double score,
     std::string member
 ) {
+    removeIfExpired(key);
+
     auto iterator =
         values_.find(key);
 
@@ -654,7 +785,8 @@ SortedSetAddResult Database::sortedSetAdd(
         sorted_set.find(member);
 
     const bool inserted =
-        existing == sorted_set.end();
+        existing ==
+        sorted_set.end();
 
     sorted_set.insert_or_assign(
         std::move(member),
@@ -670,7 +802,14 @@ SortedSetAddResult Database::sortedSetAdd(
 SortedSetScoreResult Database::sortedSetScore(
     const std::string& key,
     const std::string& member
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            0.0
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -717,7 +856,14 @@ SortedSetRangeResult Database::sortedSetRange(
     const std::string& key,
     long long start,
     long long stop
-) const {
+) {
+    if (removeIfExpired(key)) {
+        return {
+            LookupStatus::Missing,
+            {}
+        };
+    }
+
     const auto iterator =
         values_.find(key);
 
@@ -781,6 +927,13 @@ SortedSetRangeResult Database::sortedSetRange(
             ordered.size()
         );
 
+    if (length == 0) {
+        return {
+            LookupStatus::Found,
+            {}
+        };
+    }
+
     if (start < 0) {
         start = length + start;
     }
@@ -800,7 +953,6 @@ SortedSetRangeResult Database::sortedSetRange(
     );
 
     if (
-        length == 0 ||
         start >= length ||
         stop < 0 ||
         start > stop
@@ -833,4 +985,113 @@ SortedSetRangeResult Database::sortedSetRange(
     };
 }
 
-}  // namespace redis::storage
+bool Database::expire(
+    const std::string& key,
+    long long seconds
+) {
+    removeIfExpired(key);
+
+    if (
+        values_.find(key) ==
+        values_.end()
+    ) {
+        return false;
+    }
+
+    if (seconds <= 0) {
+        values_.erase(key);
+        removeExpiration(key);
+        return true;
+    }
+
+    expirations_.insert_or_assign(
+        key,
+        Clock::now() +
+            std::chrono::seconds(
+                seconds
+            )
+    );
+
+    return true;
+}
+
+long long Database::ttl(
+    const std::string& key
+) {
+    if (removeIfExpired(key)) {
+        return -2;
+    }
+
+    if (
+        values_.find(key) ==
+        values_.end()
+    ) {
+        return -2;
+    }
+
+    const auto expiration_iterator =
+        expirations_.find(key);
+
+    if (
+        expiration_iterator ==
+        expirations_.end()
+    ) {
+        return -1;
+    }
+
+    const auto remaining =
+        std::chrono::duration_cast<
+            std::chrono::seconds
+        >(
+            expiration_iterator->second -
+            Clock::now()
+        ).count();
+
+    if (remaining < 0) {
+        values_.erase(key);
+        expirations_.erase(
+            expiration_iterator
+        );
+
+        return -2;
+    }
+
+    return remaining;
+}
+
+bool Database::removeIfExpired(
+    const std::string& key
+) {
+    const auto expiration_iterator =
+        expirations_.find(key);
+
+    if (
+        expiration_iterator ==
+        expirations_.end()
+    ) {
+        return false;
+    }
+
+    if (
+        Clock::now() <
+        expiration_iterator->second
+    ) {
+        return false;
+    }
+
+    values_.erase(key);
+
+    expirations_.erase(
+        expiration_iterator
+    );
+
+    return true;
+}
+
+void Database::removeExpiration(
+    const std::string& key
+) {
+    expirations_.erase(key);
+}
+
+}  // namespace redis::storage9

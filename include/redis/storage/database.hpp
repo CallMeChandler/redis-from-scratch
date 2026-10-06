@@ -2,6 +2,7 @@
 
 #include "redis/storage/redis_value.hpp"
 
+#include <chrono>
 #include <cstddef>
 #include <string>
 #include <unordered_map>
@@ -85,19 +86,19 @@ public:
     [[nodiscard]]
     StringLookupResult getString(
         const std::string& key
-    ) const;
+    );
 
     [[nodiscard]]
     bool exists(
         const std::string& key
-    ) const;
+    );
 
     bool erase(
         const std::string& key
     );
 
     [[nodiscard]]
-    std::size_t size() const noexcept;
+    std::size_t size();
 
     bool hashSet(
         const std::string& key,
@@ -109,7 +110,7 @@ public:
     HashLookupResult hashGet(
         const std::string& key,
         const std::string& field
-    ) const;
+    );
 
     [[nodiscard]]
     ListPushResult listPushLeft(
@@ -138,12 +139,12 @@ public:
         const std::string& key,
         long long start,
         long long stop
-    ) const;
+    );
 
     [[nodiscard]]
     ListLengthResult listLength(
         const std::string& key
-    ) const;
+    );
 
     [[nodiscard]]
     SetMutationResult setAdd(
@@ -161,12 +162,12 @@ public:
     SetMembershipResult setContains(
         const std::string& key,
         const std::string& member
-    ) const;
+    );
 
     [[nodiscard]]
     SetMembersResult setMembers(
         const std::string& key
-    ) const;
+    );
 
     [[nodiscard]]
     SortedSetAddResult sortedSetAdd(
@@ -179,20 +180,46 @@ public:
     SortedSetScoreResult sortedSetScore(
         const std::string& key,
         const std::string& member
-    ) const;
+    );
 
     [[nodiscard]]
     SortedSetRangeResult sortedSetRange(
         const std::string& key,
         long long start,
         long long stop
-    ) const;
+    );
+
+    bool expire(
+        const std::string& key,
+        long long seconds
+    );
+
+    [[nodiscard]]
+    long long ttl(
+        const std::string& key
+    );
 
 private:
+    using Clock =
+        std::chrono::steady_clock;
+
+    bool removeIfExpired(
+        const std::string& key
+    );
+
+    void removeExpiration(
+        const std::string& key
+    );
+
     std::unordered_map<
         std::string,
         RedisValue
     > values_;
+
+    std::unordered_map<
+        std::string,
+        Clock::time_point
+    > expirations_;
 };
 
 }  // namespace redis::storage

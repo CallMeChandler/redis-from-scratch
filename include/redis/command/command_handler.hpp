@@ -149,6 +149,16 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeExpire(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
+    std::string executeTTL(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );

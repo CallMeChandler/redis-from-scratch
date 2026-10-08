@@ -178,6 +178,26 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeWatch(
+        const std::vector<std::string>& arguments,
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    std::string executeUnwatch(
+        const std::vector<std::string>& arguments,
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    bool watchedKeysChanged(
+        const TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    static std::string encodeNullArray();
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );

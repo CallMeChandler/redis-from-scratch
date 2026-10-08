@@ -56,6 +56,20 @@ std::string CommandHandler::executeTransaction(
             arguments[0]
         );
 
+    if (command == "WATCH"){
+        return executeWatch(
+            arguments,
+            transaction
+        );
+    }
+
+    if (command == "UNWATCH") {
+        return executeUnwatch(
+            arguments,
+            transaction
+        );
+    }
+
     if (command == "MULTI") {
         if (arguments.size() != 1) {
             return encodeError(
@@ -132,8 +146,20 @@ std::string CommandHandler::executeTransaction(
 std::string CommandHandler::executeExec(
     TransactionState& transaction
 ) {
+    if (
+        watchedKeysChanged(
+            transaction
+        )
+    ) {
+        transaction.discard();
+
+        return encodeNullArray();
+    }
+
     std::vector<protocol::RespValue> commands =
         transaction.takeQueueCommands();
+
+    transaction.unwatch();
 
     std::vector<std::string> responses;
 
@@ -146,15 +172,92 @@ std::string CommandHandler::executeExec(
         commands
     ) {
         responses.push_back(
-            executeImmediate(
-                command
-            )
+            executeImmediate(command)
         );
     }
 
     return encodeRawArray(
         responses
     );
+}
+
+std::string CommandHandler::executeWatch(
+    const std::vector<std::string>& arguments,
+    TransactionState& transaction
+) {
+    if (arguments.size() < 2){
+        return encodeError(
+            "ERR Wrong number of arguments for 'watch' command"
+        );
+    }
+
+    if (transaction.active()) {
+        return encodeError(
+            "ERR WATCH inside MULTI is not allowed"
+        );
+    }
+
+    for (
+        std::size_t index = 1;
+        index < arguments.size();
+        ++index
+    ) {
+        const std::string& key =
+            arguments[index];
+
+        transaction.watch(
+            key,
+            database_.keyVersion(key)
+        );
+    }
+
+    return encodeSimpleString(
+        "OK"
+    );
+}
+
+std::string CommandHandler::executeUnwatch(
+    const std::vector<std::string>& arguments,
+    TransactionState& transaction
+) {
+    if (arguments.size()!=1){
+        return encodeError(
+            "ERR wrong number of arguments for 'unwatch' command"
+        );
+    }
+
+    transaction.unwatch();
+
+    return encodeSimpleString(
+        "OK"
+    );
+}
+
+bool CommandHandler::watchedKeysChanged(
+    const TransactionState& transaction
+) {
+    for (
+        const auto& entry :
+        transaction.watchedVersions()
+    ) {
+        const std::string& key =
+            entry.first;
+
+        const std::uint64_t expected_version =
+            entry.second;
+
+        const std::uint64_t current_version =
+            database_.keyVersion(key);
+
+        if (
+            current_version !=
+            expected_version
+        ) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 std::string CommandHandler::executeImmediate(
@@ -1111,6 +1214,10 @@ std::string CommandHandler::encodeArray(
     }
 
     return output;
+}
+
+std::string CommandHandler::encodeNullArray(){
+    return "*-1\r\n";
 }
 
 std::string CommandHandler::encodeError(

@@ -23,6 +23,8 @@ void Database::setString(
         std::move(redis_value)
     );
 
+    markKeyModified(key);
+
     removeExpiration(key);
 }
 
@@ -79,6 +81,10 @@ bool Database::erase(
     const bool removed =
         values_.erase(key) > 0;
 
+    if (removed) {
+        markKeyModified(key);
+    }
+
     removeExpiration(key);
 
     return removed;
@@ -125,6 +131,8 @@ bool Database::hashSet(
             }
         );
 
+        markKeyModified(key);
+
         return true;
     }
 
@@ -142,6 +150,8 @@ bool Database::hashSet(
         std::move(field),
         std::move(value)
     );
+
+    markKeyModified(key);
 
     return true;
 }
@@ -222,6 +232,8 @@ ListPushResult Database::listPushLeft(
             }
         );
 
+        markKeyModified(key);
+
         return {
             LookupStatus::Found,
             1
@@ -244,6 +256,8 @@ ListPushResult Database::listPushLeft(
     list.push_front(
         std::move(value)
     );
+
+    markKeyModified(key);
 
     return {
         LookupStatus::Found,
@@ -274,6 +288,8 @@ ListPushResult Database::listPushRight(
             }
         );
 
+        markKeyModified(key);
+
         return {
             LookupStatus::Found,
             1
@@ -296,6 +312,8 @@ ListPushResult Database::listPushRight(
     list.push_back(
         std::move(value)
     );
+
+    markKeyModified(key);
 
     return {
         LookupStatus::Found,
@@ -340,6 +358,8 @@ ListPopResult Database::listPopLeft(
         std::move(list.front());
 
     list.pop_front();
+
+    markKeyModified(key);
 
     if (list.empty()) {
         values_.erase(iterator);
@@ -389,6 +409,8 @@ ListPopResult Database::listPopRight(
         std::move(list.back());
 
     list.pop_back();
+
+    markKeyModified(key);
 
     if (list.empty()) {
         values_.erase(iterator);
@@ -564,6 +586,8 @@ SetMutationResult Database::setAdd(
             }
         );
 
+        markKeyModified(key);
+
         return {
             LookupStatus::Found,
             true
@@ -587,6 +611,10 @@ SetMutationResult Database::setAdd(
         set.insert(
             std::move(member)
         );
+
+    if (result.second) {
+        markKeyModified(key);
+    }
 
     return {
         LookupStatus::Found,
@@ -630,6 +658,10 @@ SetMutationResult Database::setRemove(
 
     const bool removed =
         set.erase(member) > 0;
+
+    if (removed) {
+        markKeyModified(key);
+    }
 
     if (set.empty()) {
         values_.erase(iterator);
@@ -762,6 +794,8 @@ SortedSetAddResult Database::sortedSetAdd(
             }
         );
 
+        markKeyModified(key);
+
         return {
             LookupStatus::Found,
             true
@@ -792,6 +826,8 @@ SortedSetAddResult Database::sortedSetAdd(
         std::move(member),
         score
     );
+
+    markKeyModified(key);
 
     return {
         LookupStatus::Found,
@@ -1000,6 +1036,7 @@ bool Database::expire(
 
     if (seconds <= 0) {
         values_.erase(key);
+        markKeyModified(key);
         removeExpiration(key);
         return true;
     }
@@ -1011,6 +1048,8 @@ bool Database::expire(
                 seconds
             )
     );
+
+    markKeyModified(key);
 
     return true;
 }
@@ -1087,9 +1126,12 @@ std::size_t Database::activeExpireCycle(
         if (
             now >= iterator->second
         ) {
-            values_.erase(
-                iterator->first
-            );
+            const std::string key =
+                iterator->first;
+
+            values_.erase(key);
+
+            markKeyModified(key);
 
             iterator =
                 expirations_.erase(
@@ -1099,7 +1141,7 @@ std::size_t Database::activeExpireCycle(
             ++removed;
 
             continue;
-        }
+    }
 
         ++iterator;
     }
@@ -1129,6 +1171,8 @@ bool Database::removeIfExpired(
 
     values_.erase(key);
 
+    markKeyModified(key);
+
     expirations_.erase(
         expiration_iterator
     );
@@ -1140,6 +1184,30 @@ void Database::removeExpiration(
     const std::string& key
 ) {
     expirations_.erase(key);
+}
+
+std::uint64_t Database::keyVersion(
+    const std::string& key
+) {
+    removeIfExpired(key);
+
+    const auto iterator =
+        key_versions_.find(key);
+
+    if (
+        iterator ==
+        key_versions_.end()
+    ) {
+        return 0;
+    }
+
+    return iterator->second;
+}
+
+void Database::markKeyModified(
+    const std::string& key
+) {
+    ++key_versions_[key];
 }
 
 }  // namespace redis::storage9

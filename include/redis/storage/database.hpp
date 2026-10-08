@@ -2,6 +2,7 @@
 
 #include "redis/storage/redis_value.hpp"
 
+#include <cstdint>
 #include <chrono>
 #include <cstddef>
 #include <string>
@@ -203,6 +204,11 @@ public:
         std::size_t max_keys
     );
 
+    [[nodiscard]]
+    std::uint64_t keyVersion(
+        const std::string& key
+    );
+
 private:
     using Clock =
         std::chrono::steady_clock;
@@ -214,6 +220,15 @@ private:
     void removeExpiration(
         const std::string& key
     );
+
+    void markKeyModified(
+        const std::string& key
+    );
+
+    std::unordered_map<
+        std::string,
+        std::uint64_t
+    > key_versions_;
 
     std::unordered_map<
         std::string,

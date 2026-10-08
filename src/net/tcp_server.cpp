@@ -516,7 +516,8 @@ bool TcpServer::processInput(
 
         const std::string response =
             command_handler_.execute(
-                result.value
+                result.value,
+                connection.transaction()
             );
 
         connection.appendOutput(

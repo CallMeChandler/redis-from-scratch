@@ -1,5 +1,7 @@
 #pragma once
 
+#include "redis/command/transaction_state.hpp"
+
 #include <cstddef>
 #include <string>
 #include <string_view>
@@ -29,9 +31,13 @@ public:
     [[nodiscard]]
     const std::string& inputBuffer() const noexcept;
 
-    void consumeInput(std::size_t bytes);
+    void consumeInput(
+        std::size_t bytes
+    );
 
-    void appendOutput(std::string_view data);
+    void appendOutput(
+        std::string_view data
+    );
 
     [[nodiscard]]
     bool hasPendingOutput() const noexcept;
@@ -39,15 +45,24 @@ public:
     [[nodiscard]]
     std::string_view pendingOutput() const noexcept;
 
-    void consumeOutput(std::size_t bytes);
+    void consumeOutput(
+        std::size_t bytes
+    );
+
+    [[nodiscard]]
+    command::TransactionState& transaction() noexcept;
 
 private:
     void closeSocket() noexcept;
 
     int fd_;
+
     std::string input_buffer_;
     std::string output_buffer_;
+
     std::size_t output_offset_;
+
+    command::TransactionState transaction_;
 };
 
 }  // namespace redis::net

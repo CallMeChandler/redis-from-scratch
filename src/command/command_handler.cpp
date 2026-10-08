@@ -17,6 +17,147 @@ CommandHandler::CommandHandler(
 }
 
 std::string CommandHandler::execute(
+    const protocol::RespValue& value,
+    TransactionState& transaction
+) {
+    std::vector<std::string> arguments;
+
+    if (
+        !extractArguments(
+            value,
+            arguments
+        )
+    ) {
+        return encodeError(
+            "ERR command must be an array of bulk strings"
+        );
+    }
+
+    if (arguments.empty()) {
+        return encodeError(
+            "ERR empty command"
+        );
+    }
+
+    return executeTransaction(
+        value,
+        arguments,
+        transaction
+    );
+}
+
+std::string CommandHandler::executeTransaction(
+    const protocol::RespValue& value,
+    const std::vector<std::string>& arguments,
+    TransactionState& transaction
+) {
+    const std::string command =
+        normalizeCommand(
+            arguments[0]
+        );
+
+    if (command == "MULTI") {
+        if (arguments.size() != 1) {
+            return encodeError(
+                "ERR wrong number of arguments for 'multi' command"
+            );
+        }
+
+        if (transaction.active()) {
+            return encodeError(
+                "ERR MULTI calls can not be nested"
+            );
+        }
+
+        transaction.begin();
+
+        return encodeSimpleString(
+            "OK"
+        );
+    }
+
+    if (command == "DISCARD") {
+        if (arguments.size() != 1) {
+            return encodeError(
+                "ERR wrong number of arguments for 'discard' command"
+            );
+        }
+
+        if (!transaction.active()) {
+            return encodeError(
+                "ERR DISCARD without MULTI"
+            );
+        }
+
+        transaction.discard();
+
+        return encodeSimpleString(
+            "OK"
+        );
+    }
+
+    if (command == "EXEC") {
+        if (arguments.size() != 1) {
+            return encodeError(
+                "ERR wrong number of arguments for 'exec' command"
+            );
+        }
+
+        if (!transaction.active()) {
+            return encodeError(
+                "ERR EXEC without MULTI"
+            );
+        }
+
+        return executeExec(
+            transaction
+        );
+    }
+
+    if (transaction.active()) {
+        transaction.queue(
+            value
+        );
+
+        return encodeSimpleString(
+            "QUEUED"
+        );
+    }
+
+    return executeImmediate(
+        value
+    );
+}
+
+std::string CommandHandler::executeExec(
+    TransactionState& transaction
+) {
+    std::vector<protocol::RespValue> commands =
+        transaction.takeQueueCommands();
+
+    std::vector<std::string> responses;
+
+    responses.reserve(
+        commands.size()
+    );
+
+    for (
+        const protocol::RespValue& command :
+        commands
+    ) {
+        responses.push_back(
+            executeImmediate(
+                command
+            )
+        );
+    }
+
+    return encodeRawArray(
+        responses
+    );
+}
+
+std::string CommandHandler::executeImmediate(
     const protocol::RespValue& value
 ) {
     std::vector<std::string> arguments;
@@ -931,6 +1072,26 @@ std::string CommandHandler::encodeInteger(
     return ":" +
            std::to_string(value) +
            "\r\n";
+}
+
+std::string CommandHandler::encodeRawArray(
+    const std::vector<std::string>& responses
+) {
+    std::string output =
+        "*" +
+        std::to_string(
+            responses.size()
+        ) +
+        "\r\n";
+
+    for (
+        const std::string& response :
+        responses
+    ) {
+        output += response;
+    }
+
+    return output;
 }
 
 std::string CommandHandler::encodeArray(

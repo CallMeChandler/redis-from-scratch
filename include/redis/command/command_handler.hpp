@@ -1,5 +1,6 @@
 #pragma once
 
+#include "redis/command/transaction_state.hpp"
 #include "redis/protocol/resp_value.hpp"
 #include "redis/storage/database.hpp"
 
@@ -16,10 +17,16 @@ public:
 
     [[nodiscard]]
     std::string execute(
-        const protocol::RespValue& value
+        const protocol::RespValue& value,
+        TransactionState& transaction
     );
 
 private:
+    [[nodiscard]]
+    std::string executeImmediate(
+        const protocol::RespValue& value
+    );
+
     [[nodiscard]]
     static bool extractArguments(
         const protocol::RespValue& value,
@@ -41,6 +48,18 @@ private:
     static bool parseDouble(
         const std::string& text,
         double& value
+    );
+
+    [[nodiscard]]
+    std::string executeTransaction(
+        const protocol::RespValue& value,
+        const std::vector<std::string>& arguments,
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    std::string executeExec(
+        TransactionState& transaction
     );
 
     [[nodiscard]]
@@ -179,6 +198,11 @@ private:
     [[nodiscard]]
     static std::string encodeArray(
         const std::vector<std::string>& values
+    );
+
+    [[nodiscard]]
+    static std::string encodeRawArray(
+        const std::vector<std::string>& responses
     );
 
     [[nodiscard]]

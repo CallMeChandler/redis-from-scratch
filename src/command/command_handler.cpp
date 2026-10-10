@@ -11,9 +11,11 @@
 namespace redis::command {
 
 CommandHandler::CommandHandler(
-    storage::Database& database
+    storage::Database& database,
+    persistence::RdbSnapshot& snapshot
 )
-    : database_(database) {
+    : database_(database),
+      snapshot_(snapshot) {
 }
 
 std::string CommandHandler::execute(
@@ -370,6 +372,10 @@ std::string CommandHandler::executeImmediate(
 
     if (command == "TTL") {
         return executeTTL(arguments);
+    }
+
+    if (command == "SAVE") {
+        return executeSave(arguments);
     }
 
     return encodeError(
@@ -1144,6 +1150,26 @@ std::string CommandHandler::executeTTL(
         database_.ttl(
             arguments[1]
         )
+    );
+}
+
+std::string CommandHandler::executeSave(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 1) {
+        return encodeError(
+            "ERR wrong number of arguments for 'save' command"
+        );
+    }
+
+    if (!snapshot_.save(database_)) {
+        return encodeError(
+            "ERR failed to save snapshot"
+        );
+    }
+
+    return encodeSimpleString(
+        "OK"
     );
 }
 

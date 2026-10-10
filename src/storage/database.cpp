@@ -1210,4 +1210,27 @@ void Database::markKeyModified(
     ++key_versions_[key];
 }
 
+const std::unordered_map<
+    std::string,
+    RedisValue
+>& Database::values() const noexcept {
+    return values_;
+}
+
+void Database::clear() {
+    values_.clear();
+    expirations_.clear();
+    key_versions_.clear();
+}
+
+void Database::restoreValue(
+    std::string key,
+    RedisValue value
+) {
+    values_.insert_or_assign(
+        std::move(key),
+        std::move(value)
+    );
+}
+
 }  // namespace redis::storage9

@@ -16,6 +16,7 @@ add_executable(
     src/command/command_handler.cpp
     src/net/connection.cpp
     src/net/tcp_server.cpp
+    src/persistence/rdb.cpp
     src/protocol/resp_parser.cpp
     src/storage/database.cpp
 )

@@ -42,7 +42,16 @@ TcpServer::TcpServer(std::uint16_t port)
       connections_(),
       resp_parser_(),
       database_(),
-      command_handler_(database_) {
+      snapshot_("dump.rdb"),
+      command_handler_(
+        database_,
+        snapshot_
+      ) {
+        if (!snapshot_.load(database_)) {
+            throw std::runtime_error(
+                "failed to load RDB snapshot"
+            );
+        }
 }
 
 TcpServer::~TcpServer() {

@@ -209,6 +209,19 @@ public:
         const std::string& key
     );
 
+    [[nodiscard]]
+    const std::unordered_map<
+        std::string,
+        RedisValue
+    >& values() const noexcept;
+
+    void clear();
+
+    void restoreValue(
+        std::string key,
+        RedisValue value
+    );
+
 private:
     using Clock =
         std::chrono::steady_clock;

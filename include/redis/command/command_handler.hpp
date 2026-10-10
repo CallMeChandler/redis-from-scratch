@@ -3,6 +3,7 @@
 #include "redis/command/transaction_state.hpp"
 #include "redis/protocol/resp_value.hpp"
 #include "redis/storage/database.hpp"
+#include "redis/persistence/rdb.hpp"
 
 #include <string>
 #include <vector>
@@ -12,7 +13,8 @@ namespace redis::command {
 class CommandHandler {
 public:
     explicit CommandHandler(
-        storage::Database& database
+        storage::Database& database,
+        persistence::RdbSnapshot& snapshot
     );
 
     [[nodiscard]]
@@ -22,6 +24,11 @@ public:
     );
 
 private:
+    [[nodiscard]]
+    std::string executeSave(
+        const std::vector<std::string>& arguments
+    );
+    
     [[nodiscard]]
     std::string executeImmediate(
         const protocol::RespValue& value
@@ -234,6 +241,7 @@ private:
     static std::string encodeWrongTypeError();
 
     storage::Database& database_;
+    persistence::RdbSnapshot& snapshot_;
 };
 
 }  // namespace redis::command

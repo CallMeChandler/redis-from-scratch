@@ -4,6 +4,7 @@
 #include "redis/net/connection.hpp"
 #include "redis/protocol/resp_parser.hpp"
 #include "redis/storage/database.hpp"
+#include "redis/persistence/rdb.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -71,6 +72,7 @@ private:
     protocol::RespParser resp_parser_;
 
     storage::Database database_;
+    persistence::RdbSnapshot snapshot_;
     command::CommandHandler command_handler_;
 };
 

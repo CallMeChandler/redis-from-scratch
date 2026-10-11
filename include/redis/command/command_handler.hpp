@@ -4,6 +4,7 @@
 #include "redis/protocol/resp_value.hpp"
 #include "redis/storage/database.hpp"
 #include "redis/persistence/rdb.hpp"
+#include "redis/persistence/aof.hpp"
 
 #include <string>
 #include <vector>
@@ -14,7 +15,13 @@ class CommandHandler {
 public:
     explicit CommandHandler(
         storage::Database& database,
-        persistence::RdbSnapshot& snapshot
+        persistence::RdbSnapshot& snapshot,
+        persistence::AppendOnlyFile& aof
+    );
+
+    [[nodiscard]]
+    std::string replay(
+        const protocol::RespValue& value
     );
 
     [[nodiscard]]
@@ -31,7 +38,8 @@ private:
     
     [[nodiscard]]
     std::string executeImmediate(
-        const protocol::RespValue& value
+        const protocol::RespValue& value,
+        bool append_to_aof
     );
 
     [[nodiscard]]
@@ -197,6 +205,11 @@ private:
     );
 
     [[nodiscard]]
+    static bool isWriteCommand(
+        const std::string& command
+    );
+
+    [[nodiscard]]
     bool watchedKeysChanged(
         const TransactionState& transaction
     );
@@ -242,6 +255,7 @@ private:
 
     storage::Database& database_;
     persistence::RdbSnapshot& snapshot_;
+    persistence::AppendOnlyFile& aof_;
 };
 
 }  // namespace redis::command

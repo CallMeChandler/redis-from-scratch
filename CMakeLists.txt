@@ -17,6 +17,7 @@ add_executable(
     src/net/connection.cpp
     src/net/tcp_server.cpp
     src/persistence/rdb.cpp
+    src/persistence/aof.cpp
     src/protocol/resp_parser.cpp
     src/storage/database.cpp
 )

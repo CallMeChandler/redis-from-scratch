@@ -5,6 +5,7 @@
 #include "redis/protocol/resp_parser.hpp"
 #include "redis/storage/database.hpp"
 #include "redis/persistence/rdb.hpp"
+#include "redis/persistence/aof.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -73,6 +74,7 @@ private:
 
     storage::Database database_;
     persistence::RdbSnapshot snapshot_;
+    persistence::AppendOnlyFile aof_;
     command::CommandHandler command_handler_;
 };
 

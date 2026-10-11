@@ -10,6 +10,7 @@
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <vector>
 #include <string_view>
 #include <sys/epoll.h>
 #include <sys/socket.h>
@@ -43,15 +44,44 @@ TcpServer::TcpServer(std::uint16_t port)
       resp_parser_(),
       database_(),
       snapshot_("dump.rdb"),
+      aof_("appendonly.aof"),
       command_handler_(
-        database_,
-        snapshot_
+          database_,
+          snapshot_,
+          aof_
       ) {
-        if (!snapshot_.load(database_)) {
+    if (!snapshot_.load(database_)) {
+        throw std::runtime_error(
+            "failed to load RDB snapshot"
+        );
+    }
+
+    std::vector<protocol::RespValue> aof_commands;
+
+    if (!aof_.load(aof_commands)) {
+        throw std::runtime_error(
+            "failed to load AOF"
+        );
+    }
+
+    for (
+        const protocol::RespValue& command :
+        aof_commands
+    ) {
+        const std::string response =
+            command_handler_.replay(
+                command
+            );
+
+        if (
+            !response.empty() &&
+            response.front() == '-'
+        ) {
             throw std::runtime_error(
-                "failed to load RDB snapshot"
+                "failed while replaying AOF"
             );
         }
+    }
 }
 
 TcpServer::~TcpServer() {

@@ -12,10 +12,12 @@ namespace redis::command {
 
 CommandHandler::CommandHandler(
     storage::Database& database,
-    persistence::RdbSnapshot& snapshot
+    persistence::RdbSnapshot& snapshot,
+    persistence::AppendOnlyFile& aof
 )
     : database_(database),
-      snapshot_(snapshot) {
+      snapshot_(snapshot),
+      aof_(aof) {
 }
 
 std::string CommandHandler::execute(
@@ -141,7 +143,8 @@ std::string CommandHandler::executeTransaction(
     }
 
     return executeImmediate(
-        value
+        value,
+        true
     );
 }
 
@@ -174,7 +177,10 @@ std::string CommandHandler::executeExec(
         commands
     ) {
         responses.push_back(
-            executeImmediate(command)
+            executeImmediate(
+                command,
+                true
+            )
         );
     }
 
@@ -263,11 +269,17 @@ bool CommandHandler::watchedKeysChanged(
 }
 
 std::string CommandHandler::executeImmediate(
-    const protocol::RespValue& value
+    const protocol::RespValue& value,
+    bool append_to_aof
 ) {
     std::vector<std::string> arguments;
 
-    if (!extractArguments(value, arguments)) {
+    if (
+        !extractArguments(
+            value,
+            arguments
+        )
+    ) {
         return encodeError(
             "ERR command must be an array of bulk strings"
         );
@@ -280,109 +292,123 @@ std::string CommandHandler::executeImmediate(
     }
 
     const std::string command =
-        normalizeCommand(arguments[0]);
+        normalizeCommand(
+            arguments[0]
+        );
+
+    std::string response;
 
     if (command == "PING") {
-        return executePing(arguments);
+        response =
+            executePing(arguments);
+    } else if (command == "ECHO") {
+        response =
+            executeEcho(arguments);
+    } else if (command == "SET") {
+        response =
+            executeSet(arguments);
+    } else if (command == "GET") {
+        response =
+            executeGet(arguments);
+    } else if (command == "EXISTS") {
+        response =
+            executeExists(arguments);
+    } else if (command == "DEL") {
+        response =
+            executeDel(arguments);
+    } else if (command == "HSET") {
+        response =
+            executeHSet(arguments);
+    } else if (command == "HGET") {
+        response =
+            executeHGet(arguments);
+    } else if (command == "LPUSH") {
+        response =
+            executeLPush(arguments);
+    } else if (command == "RPUSH") {
+        response =
+            executeRPush(arguments);
+    } else if (command == "LPOP") {
+        response =
+            executeLPop(arguments);
+    } else if (command == "RPOP") {
+        response =
+            executeRPop(arguments);
+    } else if (command == "LRANGE") {
+        response =
+            executeLRange(arguments);
+    } else if (command == "LLEN") {
+        response =
+            executeLLen(arguments);
+    } else if (command == "SADD") {
+        response =
+            executeSAdd(arguments);
+    } else if (command == "SREM") {
+        response =
+            executeSRem(arguments);
+    } else if (command == "SISMEMBER") {
+        response =
+            executeSIsMember(arguments);
+    } else if (command == "SMEMBERS") {
+        response =
+            executeSMembers(arguments);
+    } else if (command == "ZADD") {
+        response =
+            executeZAdd(arguments);
+    } else if (command == "ZSCORE") {
+        response =
+            executeZScore(arguments);
+    } else if (command == "ZRANGE") {
+        response =
+            executeZRange(arguments);
+    } else if (command == "EXPIRE") {
+        response =
+            executeExpire(arguments);
+    } else if (command == "TTL") {
+        response =
+            executeTTL(arguments);
+    } else if (command == "SAVE") {
+        response =
+            executeSave(arguments);
+    } else {
+        return encodeError(
+            "ERR unknown command '" +
+            arguments[0] +
+            "'"
+        );
     }
 
-    if (command == "ECHO") {
-        return executeEcho(arguments);
+    if (
+        append_to_aof &&
+        isWriteCommand(command) &&
+        !response.empty() &&
+        response.front() != '-'
+    ) {
+        if (!aof_.append(arguments)) {
+            return encodeError(
+                "ERR failed to append command to AOF"
+            );
+        }
     }
 
-    if (command == "SET") {
-        return executeSet(arguments);
-    }
+    return response;
+}
 
-    if (command == "GET") {
-        return executeGet(arguments);
-    }
-
-    if (command == "EXISTS") {
-        return executeExists(arguments);
-    }
-
-    if (command == "DEL") {
-        return executeDel(arguments);
-    }
-
-    if (command == "HSET") {
-        return executeHSet(arguments);
-    }
-
-    if (command == "HGET") {
-        return executeHGet(arguments);
-    }
-
-    if (command == "LPUSH") {
-        return executeLPush(arguments);
-    }
-
-    if (command == "RPUSH") {
-        return executeRPush(arguments);
-    }
-
-    if (command == "LPOP") {
-        return executeLPop(arguments);
-    }
-
-    if (command == "RPOP") {
-        return executeRPop(arguments);
-    }
-
-    if (command == "LRANGE") {
-        return executeLRange(arguments);
-    }
-
-    if (command == "LLEN") {
-        return executeLLen(arguments);
-    }
-
-    if (command == "SADD") {
-        return executeSAdd(arguments);
-    }
-
-    if (command == "SREM") {
-        return executeSRem(arguments);
-    }
-
-    if (command == "SISMEMBER") {
-        return executeSIsMember(arguments);
-    }
-
-    if (command == "SMEMBERS") {
-        return executeSMembers(arguments);
-    }
-
-    if (command == "ZADD") {
-        return executeZAdd(arguments);
-    }
-
-    if (command == "ZSCORE") {
-        return executeZScore(arguments);
-    }
-
-    if (command == "ZRANGE") {
-        return executeZRange(arguments);
-    }
-
-    if (command == "EXPIRE") {
-        return executeExpire(arguments);
-    }
-
-    if (command == "TTL") {
-        return executeTTL(arguments);
-    }
-
-    if (command == "SAVE") {
-        return executeSave(arguments);
-    }
-
-    return encodeError(
-        "ERR unknown command '" +
-        arguments[0] +
-        "'"
-    );
+bool CommandHandler::isWriteCommand(
+    const std::string& command
+) {
+    return
+        command == "SET" ||
+        command == "DEL" ||
+        command == "HSET" ||
+        command == "LPUSH" ||
+        command == "RPUSH" ||
+        command == "LPOP" ||
+        command == "RPOP" ||
+        command == "SADD" ||
+        command == "SREM" ||
+        command == "ZADD" ||
+        command == "EXPIRE";
 }
 
 bool CommandHandler::extractArguments(
@@ -1170,6 +1196,15 @@ std::string CommandHandler::executeSave(
 
     return encodeSimpleString(
         "OK"
+    );
+}
+
+std::string CommandHandler::replay(
+    const protocol::RespValue& value
+) {
+    return executeImmediate(
+        value,
+        false
     );
 }
 

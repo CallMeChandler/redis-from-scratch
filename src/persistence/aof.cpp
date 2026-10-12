@@ -2,8 +2,12 @@
 
 #include "redis/protocol/resp_parser.hpp"
 
+#include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <string>
+#include <string_view>
+#include <system_error>
 #include <utility>
 #include <vector>
 
@@ -44,10 +48,10 @@ bool AppendOnlyFile::append(
 }
 
 bool AppendOnlyFile::load(
-    std::vector<
-        protocol::RespValue
-    >& commands
+    std::vector<protocol::RespValue>& commands
 ) const {
+    commands.clear();
+
     std::ifstream input(
         path_,
         std::ios::binary
@@ -57,12 +61,14 @@ bool AppendOnlyFile::load(
         return true;
     }
 
-    const std::string data{
-        std::istreambuf_iterator<char>(
-            input
-        ),
+    const std::string data(
+        (std::istreambuf_iterator<char>(input)),
         std::istreambuf_iterator<char>()
-    };
+    );
+
+    if (data.empty()) {
+        return true;
+    }
 
     protocol::RespParser parser;
 
@@ -96,6 +102,14 @@ bool AppendOnlyFile::load(
             return false;
         }
 
+        if (
+            result.consumed == 0 ||
+            result.consumed >
+                remaining.size()
+        ) {
+            return false;
+        }
+
         commands.push_back(
             result.value
         );
@@ -105,6 +119,35 @@ bool AppendOnlyFile::load(
     }
 
     return true;
+}
+
+bool AppendOnlyFile::existsAndNotEmpty() const {
+    std::error_code error;
+
+    const bool exists =
+        std::filesystem::exists(
+            path_,
+            error
+        );
+
+    if (
+        error ||
+        !exists
+    ) {
+        return false;
+    }
+
+    const std::uintmax_t size =
+        std::filesystem::file_size(
+            path_,
+            error
+        );
+
+    if (error) {
+        return false;
+    }
+
+    return size > 0;
 }
 
 std::string AppendOnlyFile::encodeCommand(
@@ -121,17 +164,18 @@ std::string AppendOnlyFile::encodeCommand(
         const std::string& argument :
         arguments
     ) {
-        output+=
+        output +=
             "$" +
             std::to_string(
-                arguments.size()
+                argument.size()
             ) +
-            "\r\n" +
-            argument +
             "\r\n";
+
+        output += argument;
+        output += "\r\n";
     }
 
     return output;
 }
 
-}
+}  // namespace redis::persistence

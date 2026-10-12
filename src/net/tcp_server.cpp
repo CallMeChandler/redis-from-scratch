@@ -36,7 +36,9 @@ std::runtime_error makeSystemError(
 
 }  // namespace
 
-TcpServer::TcpServer(std::uint16_t port)
+TcpServer::TcpServer(
+    std::uint16_t port
+)
     : port_(port),
       server_fd_(kInvalidFileDescriptor),
       epoll_fd_(kInvalidFileDescriptor),
@@ -50,37 +52,51 @@ TcpServer::TcpServer(std::uint16_t port)
           snapshot_,
           aof_
       ) {
-    if (!snapshot_.load(database_)) {
-        throw std::runtime_error(
-            "failed to load RDB snapshot"
-        );
-    }
-
-    std::vector<protocol::RespValue> aof_commands;
-
-    if (!aof_.load(aof_commands)) {
-        throw std::runtime_error(
-            "failed to load AOF"
-        );
-    }
-
-    for (
-        const protocol::RespValue& command :
-        aof_commands
+    if (
+        aof_.existsAndNotEmpty()
     ) {
-        const std::string response =
-            command_handler_.replay(
-                command
-            );
+        std::vector<
+            protocol::RespValue
+        > aof_commands;
 
-        if (
-            !response.empty() &&
-            response.front() == '-'
-        ) {
+        if (!aof_.load(aof_commands)) {
             throw std::runtime_error(
-                "failed while replaying AOF"
+                "failed to load AOF"
             );
         }
+
+        for (
+            const protocol::RespValue& command :
+            aof_commands
+        ) {
+            const std::string response =
+                command_handler_.replay(
+                    command
+                );
+
+            if (
+                !response.empty() &&
+                response.front() == '-'
+            ) {
+                throw std::runtime_error(
+                    "failed while replaying AOF"
+                );
+            }
+        }
+
+        std::cout
+            << "Recovered database from AOF"
+            << std::endl;
+    } else {
+        if (!snapshot_.load(database_)) {
+            throw std::runtime_error(
+                "failed to load RDB snapshot"
+            );
+        }
+
+        std::cout
+            << "Recovered database from RDB"
+            << std::endl;
     }
 }
 

@@ -6,8 +6,8 @@
 #include <vector>
 
 namespace redis::persistence {
-    
-class AppendOnlyFile{
+
+class AppendOnlyFile {
 public:
     explicit AppendOnlyFile(
         std::string path
@@ -25,6 +25,9 @@ public:
         >& commands
     ) const;
 
+    [[nodiscard]]
+    bool existsAndNotEmpty() const;
+
 private:
     [[nodiscard]]
     static std::string encodeCommand(
@@ -34,4 +37,4 @@ private:
     std::string path_;
 };
 
-}
+}  // namespace redis::persistence

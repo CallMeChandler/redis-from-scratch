@@ -2,10 +2,10 @@
 
 #include "redis/command/command_handler.hpp"
 #include "redis/net/connection.hpp"
+#include "redis/persistence/aof.hpp"
+#include "redis/persistence/rdb.hpp"
 #include "redis/protocol/resp_parser.hpp"
 #include "redis/storage/database.hpp"
-#include "redis/persistence/rdb.hpp"
-#include "redis/persistence/aof.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -15,15 +15,27 @@ namespace redis::net {
 
 class TcpServer {
 public:
-    explicit TcpServer(std::uint16_t port);
+    explicit TcpServer(
+        std::uint16_t port
+    );
 
     ~TcpServer();
 
-    TcpServer(const TcpServer&) = delete;
-    TcpServer& operator=(const TcpServer&) = delete;
+    TcpServer(
+        const TcpServer&
+    ) = delete;
 
-    TcpServer(TcpServer&&) = delete;
-    TcpServer& operator=(TcpServer&&) = delete;
+    TcpServer& operator=(
+        const TcpServer&
+    ) = delete;
+
+    TcpServer(
+        TcpServer&&
+    ) = delete;
+
+    TcpServer& operator=(
+        TcpServer&&
+    ) = delete;
 
     void start();
 
@@ -35,6 +47,10 @@ private:
 
     void createEpollInstance();
     void registerServerSocket();
+
+    void setupSignalHandling();
+    void handleSignalEvent();
+
     void runEventLoop();
 
     void handleNewConnection();
@@ -44,10 +60,17 @@ private:
         std::uint32_t events
     );
 
-    bool readFromClient(Connection& connection);
-    bool writeToClient(Connection& connection);
+    bool readFromClient(
+        Connection& connection
+    );
 
-    bool processInput(Connection& connection);
+    bool writeToClient(
+        Connection& connection
+    );
+
+    bool processInput(
+        Connection& connection
+    );
 
     void updateClientEvents(
         int client_fd,
@@ -59,11 +82,19 @@ private:
         std::uint32_t events
     );
 
-    void removeClient(int client_fd);
+    void removeClient(
+        int client_fd
+    );
+
+    void performGracefulShutdown();
 
     std::uint16_t port_;
+
     int server_fd_;
     int epoll_fd_;
+    int signal_fd_;
+
+    bool running_;
 
     std::unordered_map<
         int,
@@ -75,6 +106,7 @@ private:
     storage::Database database_;
     persistence::RdbSnapshot snapshot_;
     persistence::AppendOnlyFile aof_;
+
     command::CommandHandler command_handler_;
 };
 

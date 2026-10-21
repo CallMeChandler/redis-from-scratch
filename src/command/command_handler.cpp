@@ -370,6 +370,9 @@ std::string CommandHandler::executeImmediate(
     } else if (command == "SAVE") {
         response =
             executeSave(arguments);
+    } else if (command == "REWRITEAOF") {
+        response = 
+            executeRewriteAof(arguments);
     } else {
         return encodeError(
             "ERR unknown command '" +
@@ -1191,6 +1194,26 @@ std::string CommandHandler::executeSave(
     if (!snapshot_.save(database_)) {
         return encodeError(
             "ERR failed to save snapshot"
+        );
+    }
+
+    return encodeSimpleString(
+        "OK"
+    );
+}
+
+std::string CommandHandler::executeRewriteAof(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size()!=1) {
+        return encodeError(
+            "ERR wrong number of arguments for 'rewriteaof' command"
+        );
+    }
+
+    if (!aof_.rewrite(database_)) {
+        return encodeError(
+            "ERR failed to rewrite AOF"
         );
     }
 

@@ -215,6 +215,11 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeRewriteAof(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeNullArray();
 
     [[nodiscard]]

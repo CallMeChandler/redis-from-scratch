@@ -1,6 +1,7 @@
 #pragma once
 
 #include "redis/protocol/resp_value.hpp"
+#include "redis/storage/database.hpp"
 
 #include <string>
 #include <vector>
@@ -27,6 +28,11 @@ public:
 
     [[nodiscard]]
     bool existsAndNotEmpty() const;
+
+    [[nodiscard]]
+    bool rewrite(
+        storage::Database& database
+    );
 
 private:
     [[nodiscard]]

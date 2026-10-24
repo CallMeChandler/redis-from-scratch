@@ -1,27 +1,23 @@
 #pragma once
 
 #include "redis/command/transaction_state.hpp"
+#include "redis/persistence/aof.hpp"
+#include "redis/persistence/rdb.hpp"
 #include "redis/protocol/resp_value.hpp"
 #include "redis/storage/database.hpp"
-#include "redis/persistence/rdb.hpp"
-#include "redis/persistence/aof.hpp"
 
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace redis::command {
 
 class CommandHandler {
 public:
-    explicit CommandHandler(
+    CommandHandler(
         storage::Database& database,
         persistence::RdbSnapshot& snapshot,
         persistence::AppendOnlyFile& aof
-    );
-
-    [[nodiscard]]
-    std::string replay(
-        const protocol::RespValue& value
     );
 
     [[nodiscard]]
@@ -30,16 +26,66 @@ public:
         TransactionState& transaction
     );
 
-private:
     [[nodiscard]]
-    std::string executeSave(
-        const std::vector<std::string>& arguments
+    std::string replay(
+        const protocol::RespValue& value
     );
-    
+
+private:
+    using CommandFunction =
+        std::string (
+            CommandHandler::*
+        )(
+            const std::vector<std::string>&
+        );
+
+    struct CommandDefinition {
+        CommandFunction handler;
+        bool writes_data;
+    };
+
+    using CommandRegistry =
+        std::unordered_map<
+            std::string,
+            CommandDefinition
+        >;
+
+    [[nodiscard]]
+    static CommandRegistry createCommandRegistry();
+
     [[nodiscard]]
     std::string executeImmediate(
         const protocol::RespValue& value,
         bool append_to_aof
+    );
+
+    [[nodiscard]]
+    std::string executeTransaction(
+        const protocol::RespValue& value,
+        const std::vector<std::string>& arguments,
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    std::string executeExec(
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    std::string executeWatch(
+        const std::vector<std::string>& arguments,
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    std::string executeUnwatch(
+        const std::vector<std::string>& arguments,
+        TransactionState& transaction
+    );
+
+    [[nodiscard]]
+    bool watchedKeysChanged(
+        const TransactionState& transaction
     );
 
     [[nodiscard]]
@@ -66,24 +112,12 @@ private:
     );
 
     [[nodiscard]]
-    std::string executeTransaction(
-        const protocol::RespValue& value,
-        const std::vector<std::string>& arguments,
-        TransactionState& transaction
-    );
-
-    [[nodiscard]]
-    std::string executeExec(
-        TransactionState& transaction
-    );
-
-    [[nodiscard]]
-    static std::string executePing(
+    std::string executePing(
         const std::vector<std::string>& arguments
     );
 
     [[nodiscard]]
-    static std::string executeEcho(
+    std::string executeEcho(
         const std::vector<std::string>& arguments
     );
 
@@ -193,34 +227,14 @@ private:
     );
 
     [[nodiscard]]
-    std::string executeWatch(
-        const std::vector<std::string>& arguments,
-        TransactionState& transaction
-    );
-
-    [[nodiscard]]
-    std::string executeUnwatch(
-        const std::vector<std::string>& arguments,
-        TransactionState& transaction
-    );
-
-    [[nodiscard]]
-    static bool isWriteCommand(
-        const std::string& command
-    );
-
-    [[nodiscard]]
-    bool watchedKeysChanged(
-        const TransactionState& transaction
+    std::string executeSave(
+        const std::vector<std::string>& arguments
     );
 
     [[nodiscard]]
     std::string executeRewriteAof(
         const std::vector<std::string>& arguments
     );
-
-    [[nodiscard]]
-    static std::string encodeNullArray();
 
     [[nodiscard]]
     static std::string encodeSimpleString(
@@ -251,6 +265,9 @@ private:
     );
 
     [[nodiscard]]
+    static std::string encodeNullArray();
+
+    [[nodiscard]]
     static std::string encodeError(
         const std::string& message
     );
@@ -259,8 +276,12 @@ private:
     static std::string encodeWrongTypeError();
 
     storage::Database& database_;
+
     persistence::RdbSnapshot& snapshot_;
+
     persistence::AppendOnlyFile& aof_;
+
+    CommandRegistry command_registry_;
 };
 
 }  // namespace redis::command

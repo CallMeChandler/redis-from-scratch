@@ -17,7 +17,191 @@ CommandHandler::CommandHandler(
 )
     : database_(database),
       snapshot_(snapshot),
-      aof_(aof) {
+      aof_(aof),
+      command_registry_(
+          createCommandRegistry()
+      ) {
+}
+
+CommandHandler::CommandRegistry
+CommandHandler::createCommandRegistry() {
+    return {
+        {
+            "PING",
+            {
+                &CommandHandler::executePing,
+                false
+            }
+        },
+        {
+            "ECHO",
+            {
+                &CommandHandler::executeEcho,
+                false
+            }
+        },
+        {
+            "SET",
+            {
+                &CommandHandler::executeSet,
+                true
+            }
+        },
+        {
+            "GET",
+            {
+                &CommandHandler::executeGet,
+                false
+            }
+        },
+        {
+            "EXISTS",
+            {
+                &CommandHandler::executeExists,
+                false
+            }
+        },
+        {
+            "DEL",
+            {
+                &CommandHandler::executeDel,
+                true
+            }
+        },
+        {
+            "HSET",
+            {
+                &CommandHandler::executeHSet,
+                true
+            }
+        },
+        {
+            "HGET",
+            {
+                &CommandHandler::executeHGet,
+                false
+            }
+        },
+        {
+            "LPUSH",
+            {
+                &CommandHandler::executeLPush,
+                true
+            }
+        },
+        {
+            "RPUSH",
+            {
+                &CommandHandler::executeRPush,
+                true
+            }
+        },
+        {
+            "LPOP",
+            {
+                &CommandHandler::executeLPop,
+                true
+            }
+        },
+        {
+            "RPOP",
+            {
+                &CommandHandler::executeRPop,
+                true
+            }
+        },
+        {
+            "LRANGE",
+            {
+                &CommandHandler::executeLRange,
+                false
+            }
+        },
+        {
+            "LLEN",
+            {
+                &CommandHandler::executeLLen,
+                false
+            }
+        },
+        {
+            "SADD",
+            {
+                &CommandHandler::executeSAdd,
+                true
+            }
+        },
+        {
+            "SREM",
+            {
+                &CommandHandler::executeSRem,
+                true
+            }
+        },
+        {
+            "SISMEMBER",
+            {
+                &CommandHandler::executeSIsMember,
+                false
+            }
+        },
+        {
+            "SMEMBERS",
+            {
+                &CommandHandler::executeSMembers,
+                false
+            }
+        },
+        {
+            "ZADD",
+            {
+                &CommandHandler::executeZAdd,
+                true
+            }
+        },
+        {
+            "ZSCORE",
+            {
+                &CommandHandler::executeZScore,
+                false
+            }
+        },
+        {
+            "ZRANGE",
+            {
+                &CommandHandler::executeZRange,
+                false
+            }
+        },
+        {
+            "EXPIRE",
+            {
+                &CommandHandler::executeExpire,
+                true
+            }
+        },
+        {
+            "TTL",
+            {
+                &CommandHandler::executeTTL,
+                false
+            }
+        },
+        {
+            "SAVE",
+            {
+                &CommandHandler::executeSave,
+                false
+            }
+        },
+        {
+            "REWRITEAOF",
+            {
+                &CommandHandler::executeRewriteAof,
+                false
+            }
+        }
+    };
 }
 
 std::string CommandHandler::execute(
@@ -296,84 +480,15 @@ std::string CommandHandler::executeImmediate(
             arguments[0]
         );
 
-    std::string response;
+    const auto iterator =
+        command_registry_.find(
+            command
+        );
 
-    if (command == "PING") {
-        response =
-            executePing(arguments);
-    } else if (command == "ECHO") {
-        response =
-            executeEcho(arguments);
-    } else if (command == "SET") {
-        response =
-            executeSet(arguments);
-    } else if (command == "GET") {
-        response =
-            executeGet(arguments);
-    } else if (command == "EXISTS") {
-        response =
-            executeExists(arguments);
-    } else if (command == "DEL") {
-        response =
-            executeDel(arguments);
-    } else if (command == "HSET") {
-        response =
-            executeHSet(arguments);
-    } else if (command == "HGET") {
-        response =
-            executeHGet(arguments);
-    } else if (command == "LPUSH") {
-        response =
-            executeLPush(arguments);
-    } else if (command == "RPUSH") {
-        response =
-            executeRPush(arguments);
-    } else if (command == "LPOP") {
-        response =
-            executeLPop(arguments);
-    } else if (command == "RPOP") {
-        response =
-            executeRPop(arguments);
-    } else if (command == "LRANGE") {
-        response =
-            executeLRange(arguments);
-    } else if (command == "LLEN") {
-        response =
-            executeLLen(arguments);
-    } else if (command == "SADD") {
-        response =
-            executeSAdd(arguments);
-    } else if (command == "SREM") {
-        response =
-            executeSRem(arguments);
-    } else if (command == "SISMEMBER") {
-        response =
-            executeSIsMember(arguments);
-    } else if (command == "SMEMBERS") {
-        response =
-            executeSMembers(arguments);
-    } else if (command == "ZADD") {
-        response =
-            executeZAdd(arguments);
-    } else if (command == "ZSCORE") {
-        response =
-            executeZScore(arguments);
-    } else if (command == "ZRANGE") {
-        response =
-            executeZRange(arguments);
-    } else if (command == "EXPIRE") {
-        response =
-            executeExpire(arguments);
-    } else if (command == "TTL") {
-        response =
-            executeTTL(arguments);
-    } else if (command == "SAVE") {
-        response =
-            executeSave(arguments);
-    } else if (command == "REWRITEAOF") {
-        response = 
-            executeRewriteAof(arguments);
-    } else {
+    if (
+        iterator ==
+        command_registry_.end()
+    ) {
         return encodeError(
             "ERR unknown command '" +
             arguments[0] +
@@ -381,13 +496,28 @@ std::string CommandHandler::executeImmediate(
         );
     }
 
+    const CommandDefinition& definition =
+        iterator->second;
+
+    const std::string response =
+        (
+            this->*
+            definition.handler
+        )(
+            arguments
+        );
+
     if (
         append_to_aof &&
-        isWriteCommand(command) &&
+        definition.writes_data &&
         !response.empty() &&
         response.front() != '-'
     ) {
-        if (!aof_.append(arguments)) {
+        if (
+            !aof_.append(
+                arguments
+            )
+        ) {
             return encodeError(
                 "ERR failed to append command to AOF"
             );
@@ -395,23 +525,6 @@ std::string CommandHandler::executeImmediate(
     }
 
     return response;
-}
-
-bool CommandHandler::isWriteCommand(
-    const std::string& command
-) {
-    return
-        command == "SET" ||
-        command == "DEL" ||
-        command == "HSET" ||
-        command == "LPUSH" ||
-        command == "RPUSH" ||
-        command == "LPOP" ||
-        command == "RPOP" ||
-        command == "SADD" ||
-        command == "SREM" ||
-        command == "ZADD" ||
-        command == "EXPIRE";
 }
 
 bool CommandHandler::extractArguments(

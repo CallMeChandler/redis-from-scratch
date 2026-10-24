@@ -1,0 +1,22 @@
+# Redis From Scratch configuration
+
+# TCP
+bind 0.0.0.0
+port 6379
+
+# Connection limits
+listen-backlog 128
+max-clients 1024
+
+# Persistence
+rdb-file dump.rdb
+aof-file appendonly.aof
+
+# Event loop
+epoll-timeout-ms 100
+
+# Expiration maintenance
+expire-batch-size 64
+
+# Save a final RDB snapshot on SIGINT / SIGTERM
+save-on-shutdown yes

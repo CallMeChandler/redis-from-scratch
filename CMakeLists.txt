@@ -20,6 +20,7 @@ add_executable(
     src/persistence/aof.cpp
     src/protocol/resp_parser.cpp
     src/storage/database.cpp
+    src/config/server_config.cpp
 )
 
 target_include_directories(

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "redis/command/command_handler.hpp"
+#include "redis/config/server_config.hpp"
 #include "redis/net/connection.hpp"
 #include "redis/persistence/aof.hpp"
 #include "redis/persistence/rdb.hpp"
@@ -16,7 +17,7 @@ namespace redis::net {
 class TcpServer {
 public:
     explicit TcpServer(
-        std::uint16_t port
+        config::ServerConfig config
     );
 
     ~TcpServer();
@@ -88,7 +89,7 @@ private:
 
     void performGracefulShutdown();
 
-    std::uint16_t port_;
+    config::ServerConfig config_;
 
     int server_fd_;
     int epoll_fd_;
@@ -104,7 +105,9 @@ private:
     protocol::RespParser resp_parser_;
 
     storage::Database database_;
+
     persistence::RdbSnapshot snapshot_;
+
     persistence::AppendOnlyFile aof_;
 
     command::CommandHandler command_handler_;

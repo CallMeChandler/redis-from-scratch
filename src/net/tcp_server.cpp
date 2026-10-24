@@ -13,6 +13,7 @@
 #include <string>
 #include <string_view>
 #include <vector>
+#include <utility>
 
 #include <signal.h>
 #include <sys/epoll.h>
@@ -26,18 +27,10 @@ namespace {
 
 constexpr int kInvalidFileDescriptor = -1;
 
-constexpr int kListenBacklog = 128;
-
 constexpr int kMaxEvents = 64;
 
 constexpr std::size_t kReadBufferSize =
     4096;
-
-constexpr int kEpollTimeoutMilliseconds =
-    100;
-
-constexpr std::size_t kExpirationBatchSize =
-    64;
 
 std::runtime_error makeSystemError(
     const std::string& operation
@@ -52,29 +45,35 @@ std::runtime_error makeSystemError(
 }  // namespace
 
 TcpServer::TcpServer(
-    std::uint16_t port
+    config::ServerConfig config
 )
-    : port_(port),
-      server_fd_(kInvalidFileDescriptor),
-      epoll_fd_(kInvalidFileDescriptor),
-      signal_fd_(kInvalidFileDescriptor),
+    : config_(
+          std::move(config)
+      ),
+      server_fd_(
+          kInvalidFileDescriptor
+      ),
+      epoll_fd_(
+          kInvalidFileDescriptor
+      ),
+      signal_fd_(
+          kInvalidFileDescriptor
+      ),
       running_(false),
       connections_(),
       resp_parser_(),
       database_(),
-      snapshot_("dump.rdb"),
-      aof_("appendonly.aof"),
+      snapshot_(
+          config_.rdb_path
+      ),
+      aof_(
+          config_.aof_path
+      ),
       command_handler_(
           database_,
           snapshot_,
           aof_
       ) {
-    /*
-     * Recovery rule from Milestone 1.20:
-     *
-     * Prefer a usable AOF.
-     * Otherwise fall back to RDB.
-     */
     if (
         aof_.existsAndNotEmpty()
     ) {
@@ -82,7 +81,11 @@ TcpServer::TcpServer(
             protocol::RespValue
         > aof_commands;
 
-        if (!aof_.load(aof_commands)) {
+        if (
+            !aof_.load(
+                aof_commands
+            )
+        ) {
             throw std::runtime_error(
                 "failed to load AOF"
             );
@@ -111,7 +114,11 @@ TcpServer::TcpServer(
             << "Recovered database from AOF"
             << std::endl;
     } else {
-        if (!snapshot_.load(database_)) {
+        if (
+            !snapshot_.load(
+                database_
+            )
+        ) {
             throw std::runtime_error(
                 "failed to load RDB snapshot"
             );
@@ -161,8 +168,10 @@ void TcpServer::start() {
     setupSignalHandling();
 
     std::cout
-        << "Redis server listening on port "
-        << port_
+        << "Redis server listening on "
+        << config_.bind_address
+        << ':'
+        << config_.port
         << std::endl;
 
     runEventLoop();
@@ -215,11 +224,30 @@ void TcpServer::bindSocket() {
     server_address.sin_family =
         AF_INET;
 
-    server_address.sin_addr.s_addr =
-        htonl(INADDR_ANY);
+    if (
+        config_.bind_address ==
+        "0.0.0.0"
+    ) {
+        server_address.sin_addr.s_addr =
+            htonl(INADDR_ANY);
+    } else {
+        const int result =
+            ::inet_pton(
+                AF_INET,
+                config_.bind_address.c_str(),
+                &server_address.sin_addr
+            );
+
+        if (result != 1) {
+            throw std::runtime_error(
+                "invalid bind address: " +
+                config_.bind_address
+            );
+        }
+    }
 
     server_address.sin_port =
-        htons(port_);
+        htons(config_.port);
 
     const int result =
         ::bind(
@@ -243,7 +271,7 @@ void TcpServer::listenForConnections() {
     const int result =
         ::listen(
             server_fd_,
-            kListenBacklog
+            config_.listen_backlog
         );
 
     if (result == -1) {
@@ -433,7 +461,7 @@ void TcpServer::runEventLoop() {
                 epoll_fd_,
                 events.data(),
                 kMaxEvents,
-                kEpollTimeoutMilliseconds
+                config_.epoll_timeout_ms
             );
 
         if (ready_count == -1) {
@@ -493,7 +521,7 @@ void TcpServer::runEventLoop() {
         }
 
         database_.activeExpireCycle(
-            kExpirationBatchSize
+            config_.expiration_batch_size
         );
     }
 }
@@ -536,6 +564,19 @@ void TcpServer::handleNewConnection() {
             throw makeSystemError(
                 "accept4"
             );
+        }
+
+        if (
+            connections_.size() >=
+            config_.max_clients
+        ) {
+            std::cerr
+                << "Maximum client limit reached"
+                << std::endl;
+
+            ::close(client_fd);
+
+            continue;
         }
 
         char client_ip[
@@ -1017,27 +1058,33 @@ void TcpServer::performGracefulShutdown() {
         << std::endl;
 
     /*
-     * Destroying Connection objects closes their
-     * sockets through RAII.
+- Destroying Connection objects closes their
+- sockets through RAII.
      */
     connections_.clear();
 
     /*
-     * Every AOF mutation is already flushed when
-     * AppendOnlyFile::append() completes.
+- Every AOF mutation is already flushed when
+- AppendOnlyFile::append() completes.
      *
-     * We additionally write a final RDB snapshot so
-     * the latest state has a compact persistence
-     * representation.
+- We additionally write a final RDB snapshot so
+- the latest state has a compact persistence
+- representation.
      */
-    if (!snapshot_.save(database_)) {
-        std::cerr
-            << "Warning: failed to save final RDB snapshot"
-            << std::endl;
-    } else {
-        std::cout
-            << "Final RDB snapshot saved"
-            << std::endl;
+    if (config_.save_on_shutdown) {
+        if (
+            !snapshot_.save(
+                database_
+            )
+        ) {
+            std::cerr
+                << "Warning: failed to save final RDB snapshot"
+                << std::endl;
+        } else {
+            std::cout
+                << "Final RDB snapshot saved"
+                << std::endl;
+        }
     }
 
     std::cout

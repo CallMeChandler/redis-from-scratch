@@ -21,6 +21,7 @@ add_executable(
     src/protocol/resp_parser.cpp
     src/storage/database.cpp
     src/config/server_config.cpp
+    src/pubsub/pubsub_manager.cpp
 )
 
 target_include_directories(

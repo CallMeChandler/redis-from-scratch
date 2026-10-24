@@ -7,10 +7,13 @@
 #include "redis/persistence/rdb.hpp"
 #include "redis/protocol/resp_parser.hpp"
 #include "redis/storage/database.hpp"
+#include "redis/pubsub/pubsub_manager.hpp"
 
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
+#include <string>
+#include <vector>
 
 namespace redis::net {
 
@@ -89,6 +92,12 @@ private:
 
     void performGracefulShutdown();
 
+    bool handlePubSubCommand(
+        Connection& connection,
+        const std::vector<std::string>& arguments,
+        const std::string& command
+    );
+
     config::ServerConfig config_;
 
     int server_fd_;
@@ -109,6 +118,8 @@ private:
     persistence::RdbSnapshot snapshot_;
 
     persistence::AppendOnlyFile aof_;
+
+    pubsub::PubSubManager pubsub_manager_;
 
     command::CommandHandler command_handler_;
 };

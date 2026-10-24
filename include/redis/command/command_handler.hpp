@@ -31,6 +31,13 @@ public:
         const protocol::RespValue& value
     );
 
+    [[nodiscard]]
+    static bool decodeCommand(
+        const protocol::RespValue& value,
+        std::vector<std::string>& arguments,
+        std::string& command
+    );
+
 private:
     using CommandFunction =
         std::string (

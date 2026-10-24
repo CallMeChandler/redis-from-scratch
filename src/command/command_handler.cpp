@@ -23,6 +23,32 @@ CommandHandler::CommandHandler(
       ) {
 }
 
+bool CommandHandler::decodeCommand(
+    const protocol::RespValue& value,
+    std::vector<std::string>& arguments,
+    std::string& command
+) {
+    if (
+        !extractArguments(
+            value,
+            arguments
+        )
+    ) {
+        return false;
+    }
+
+    if (arguments.empty()) {
+        return false;
+    }
+
+    command =
+        normalizeCommand(
+            arguments[0]
+        );
+
+    return true;
+}
+
 CommandHandler::CommandRegistry
 CommandHandler::createCommandRegistry() {
     return {

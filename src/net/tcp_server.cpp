@@ -69,6 +69,7 @@ TcpServer::TcpServer(
       aof_(
           config_.aof_path
       ),
+      pubsub_manager_(),
       command_handler_(
           database_,
           snapshot_,
@@ -880,6 +881,27 @@ bool TcpServer::processInput(
             result.consumed
         );
 
+        std::vector<std::string> arguments;
+        std::string command;
+
+        if (
+            command::CommandHandler::decodeCommand(
+                result.value,
+                arguments,
+                command
+            )
+        ) {
+            if (
+                handlePubSubCommand(
+                    connection,
+                    arguments,
+                    command
+                )
+            ) {
+                continue;
+            }
+        }
+
         const std::string response =
             command_handler_.execute(
                 result.value,
@@ -888,7 +910,7 @@ bool TcpServer::processInput(
 
         connection.appendOutput(
             response
-        );
+        );  
 
         std::cout
             << "Executed RESP command on fd "
@@ -962,6 +984,187 @@ bool TcpServer::writeToClient(
     );
 
     return true;
+}
+
+bool TcpServer::handlePubSubCommand(
+    Connection& connection,
+    const std::vector<std::string>& arguments,
+    const std::string& command
+) {
+    const int client_fd =
+        connection.fd();
+
+    if (
+        command == "SUBSCRIBE" ||
+        command == "UNSUBSCRIBE" ||
+        command == "PUBLISH"
+    ) {
+        if (
+            connection
+                .transaction()
+                .active()
+        ) {
+            connection.appendOutput(
+                "-ERR Pub/Sub commands are not supported inside MULTI\r\n"
+            );
+
+            return true;
+        }
+    }
+
+    if (command == "SUBSCRIBE") {
+        if (arguments.size() < 2) {
+            connection.appendOutput(
+                "-ERR wrong number of arguments for 'subscribe' command\r\n"
+            );
+
+            return true;
+        }
+
+        const std::vector<std::string> channels(
+            arguments.begin() + 1,
+            arguments.end()
+        );
+
+        const std::vector<std::string> responses =
+            pubsub_manager_.subscribe(
+                client_fd,
+                channels
+            );
+
+        for (
+            const std::string& response :
+            responses
+        ) {
+            connection.appendOutput(
+                response
+            );
+        }
+
+        return true;
+    }
+
+    if (command == "UNSUBSCRIBE") {
+        const std::vector<std::string> channels(
+            arguments.begin() + 1,
+            arguments.end()
+        );
+
+        const std::vector<std::string> responses =
+            pubsub_manager_.unsubscribe(
+                client_fd,
+                channels
+            );
+
+        for (
+            const std::string& response :
+            responses
+        ) {
+            connection.appendOutput(
+                response
+            );
+        }
+
+        return true;
+    }
+
+    /*
+     * RESP2 subscriber mode is special.
+     *
+     * Once subscribed, we do not allow normal database
+     * commands until all subscriptions are removed.
+     *
+     * PING is kept available for testing/liveness.
+     */
+    if (
+        pubsub_manager_.isSubscribed(
+            client_fd
+        ) &&
+        command != "PING"
+    ) {
+        connection.appendOutput(
+            "-ERR only SUBSCRIBE, UNSUBSCRIBE and PING are allowed while subscribed\r\n"
+        );
+
+        return true;
+    }
+
+    if (command == "PUBLISH") {
+        if (arguments.size() != 3) {
+            connection.appendOutput(
+                "-ERR wrong number of arguments for 'publish' command\r\n"
+            );
+
+            return true;
+        }
+
+        const pubsub::PublishResult result =
+            pubsub_manager_.publish(
+                arguments[1],
+                arguments[2]
+            );
+
+        std::vector<int> dead_clients;
+
+        for (
+            const int subscriber_fd :
+            result.subscriber_fds
+        ) {
+            const auto iterator =
+                connections_.find(
+                    subscriber_fd
+                );
+
+            if (
+                iterator ==
+                connections_.end()
+            ) {
+                dead_clients.push_back(
+                    subscriber_fd
+                );
+
+                continue;
+            }
+
+            Connection& subscriber =
+                *iterator->second;
+
+            subscriber.appendOutput(
+                result.payload
+            );
+
+            if (
+                !writeToClient(
+                    subscriber
+                )
+            ) {
+                dead_clients.push_back(
+                    subscriber_fd
+                );
+            }
+        }
+
+        for (
+            const int dead_fd :
+            dead_clients
+        ) {
+            removeClient(
+                dead_fd
+            );
+        }
+
+        connection.appendOutput(
+            ":" +
+            std::to_string(
+                result.subscriber_fds.size()
+            ) +
+            "\r\n"
+        );
+
+        return true;
+    }
+
+    return false;
 }
 
 void TcpServer::updateClientEvents(
@@ -1041,6 +1244,10 @@ void TcpServer::removeClient(
             << std::strerror(errno)
             << std::endl;
     }
+
+    pubsub_manager_.removeClient(
+        client_fd
+    );
 
     connections_.erase(
         client_fd

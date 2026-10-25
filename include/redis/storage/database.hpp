@@ -222,6 +222,14 @@ public:
         RedisValue value
     );
 
+    [[nodiscard]]
+    std::size_t estimatedMemoryUsage();
+
+    [[nodiscard]]
+    std::size_t estimatedMemoryUsage(
+        const std::string& key
+    );
+
 private:
     using Clock =
         std::chrono::steady_clock;

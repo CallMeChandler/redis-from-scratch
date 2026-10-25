@@ -1233,4 +1233,80 @@ void Database::restoreValue(
     );
 }
 
+std::size_t Database::estimatedMemoryUsage() {
+    std::size_t total = 0;
+
+    std::vector<std::string> keys;
+
+    keys.reserve(
+        values_.size()
+    );
+
+    for (
+        const auto& entry:
+        values_
+    ) {
+        keys.push_back(
+            entry.first
+        );
+    }
+
+    for (
+        const std::string& key:
+        keys
+    ) {
+        const std::size_t usage =
+            estimatedMemoryUsage(
+                key
+            );
+
+        total+=usage;
+    }
+
+    return total;
+}
+
+std::size_t Database::estimatedMemoryUsage(
+    const std::string& key
+) {
+    removeIfExpired(
+        key
+    );
+
+    const auto iterator =
+        values_.find(
+            key
+        );
+
+    if (
+        iterator==
+        values_.end()
+    ) {
+        return 0;
+    }
+
+    constexpr std::size_t kKeyOverhead =
+        32;
+
+    std::size_t total =
+        kKeyOverhead;
+
+    total+=key.size();
+
+    total+=iterator->second.estimatedMemoryUsage();
+
+    if (
+        expirations_.find(key) !=
+        expirations_.end()
+    ) {
+        total+= sizeof(
+            Clock::time_point
+        );
+
+        total+=16;
+    }
+
+    return total;
+}
+
 }  // namespace redis::storage9

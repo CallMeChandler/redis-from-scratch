@@ -244,6 +244,11 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeMemoryUsage(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     static std::string encodeSimpleString(
         const std::string& value
     );

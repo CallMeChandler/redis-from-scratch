@@ -226,6 +226,13 @@ CommandHandler::createCommandRegistry() {
                 &CommandHandler::executeRewriteAof,
                 false
             }
+        },
+        {
+            "MEMORY",
+            {
+                &CommandHandler::executeMemoryUsage,
+                false
+            }
         }
     };
 }
@@ -1358,6 +1365,36 @@ std::string CommandHandler::executeRewriteAof(
 
     return encodeSimpleString(
         "OK"
+    );
+}
+
+std::string CommandHandler::executeMemoryUsage(
+    const std::vector<std::string>& arguments
+) {
+    if (
+        arguments.size() != 3 ||
+        normalizeCommand(
+            arguments[1]
+        ) != "USAGE"
+    ) {
+        return encodeError(
+            "ERR syntax error"
+        );
+    }
+
+    const std::size_t usage =
+        database_.estimatedMemoryUsage(
+            arguments[2]
+        );
+
+    if (usage == 0) {
+        return encodeNullBulkString();
+    }
+
+    return encodeInteger(
+        static_cast<long long>(
+            usage
+        )
     );
 }
 

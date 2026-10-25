@@ -6,6 +6,7 @@
 #include <unordered_set>
 #include <utility>
 #include <variant>
+#include <cstddef>
 
 namespace redis::storage {
 
@@ -163,6 +164,113 @@ public:
         return std::get<RedisSortedSet>(
             value_
         );
+    }
+
+    [[nodiscard]]
+    std::size_t estimatedMemoryUsage() const {
+        constexpr std::size_t kValueOverhead =
+            sizeof(RedisValue);
+
+        constexpr std::size_t kElementOverhead =
+            24;
+
+        std::size_t total =
+            kValueOverhead;
+
+        if (
+            std::holds_alternative<std::string>(
+                value_
+            )
+        ) {
+            const std::string& value =
+                std::get<std::string>(
+                    value_
+                );
+
+            total += value.size();
+
+            return total;
+        }
+
+        if (
+            std::holds_alternative<RedisHash>(
+                value_
+            )
+        ) {
+            const RedisHash& hash =
+                std::get<RedisHash>(
+                    value_
+                );
+
+            for (
+                const auto& entry :
+                hash
+            ) {
+                total += entry.first.size();
+                total += entry.second.size();
+                total += kElementOverhead;
+            }
+
+            return total;
+        }
+
+        if (
+            std::holds_alternative<RedisList>(
+                value_
+            )
+        ) {
+            const RedisList& list =
+                std::get<RedisList>(
+                    value_
+                );
+
+            for (
+                const std::string& item :
+                list
+            ) {
+                total += item.size();
+                total += kElementOverhead;
+            }
+
+            return total;
+        }
+
+        if (
+            std::holds_alternative<RedisSet>(
+                value_
+            )
+        ) {
+            const RedisSet& set =
+                std::get<RedisSet>(
+                    value_
+                );
+
+            for (
+                const std::string& member :
+                set
+            ) {
+                total += member.size();
+                total += kElementOverhead;
+            }
+
+            return total;
+        }
+
+        const RedisSortedSet& sorted_set =
+            std::get<RedisSortedSet>(
+                value_
+            );
+
+        for (
+            const auto& entry :
+            sorted_set
+        ) {
+            total += entry.first.size();
+            total += sizeof(double);
+            total += kElementOverhead;
+        }
+
+        return total;
     }
 
 private:

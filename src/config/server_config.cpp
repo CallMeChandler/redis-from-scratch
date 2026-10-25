@@ -315,6 +315,22 @@ ServerConfig ServerConfig::loadFromFile(
                     parsed
                 );
         } else if (
+            key == "max-memory"
+        ) {
+            const auto parsed =
+                parseUnsigned(
+                    value,
+                    key,
+                    line_number
+                );
+
+            config.max_memory_bytes =
+                static_cast<std::size_t>(
+                    parsed
+                );
+        }
+        
+        else if (
             key == "save-on-shutdown"
         ) {
             config.save_on_shutdown =

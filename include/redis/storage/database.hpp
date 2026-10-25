@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <optional>
 
 namespace redis::storage {
 
@@ -230,6 +231,26 @@ public:
         const std::string& key
     );
 
+    [[nodiscard]]
+    void setMaxMemory(
+        std::size_t bytes
+    );
+
+    [[nodiscard]]
+    std::size_t maxMemory() const noexcept;
+
+    void touchKey(
+        const std::string& key
+    );
+
+    [[nodiscard]]
+    std::optional<std::string>
+    evictLeastRecentlyUsed();
+
+    [[nodiscard]]
+    std::vector<std::string>
+    evictToMemoryLimit();
+
 private:
     using Clock =
         std::chrono::steady_clock;
@@ -260,6 +281,15 @@ private:
         std::string,
         Clock::time_point
     > expirations_;
+
+    std::unordered_map<
+        std::string,
+        std::uint64_t
+    > last_access_;
+
+    std::uint64_t access_clock_ = 0;
+
+    std::size_t max_memory_bytes_ = 0;
 };
 
 }  // namespace redis::storage

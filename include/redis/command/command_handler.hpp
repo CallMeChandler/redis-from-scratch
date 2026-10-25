@@ -49,6 +49,7 @@ private:
     struct CommandDefinition {
         CommandFunction handler;
         bool writes_data;
+        bool touches_key = false;
     };
 
     using CommandRegistry =

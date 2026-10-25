@@ -75,6 +75,11 @@ TcpServer::TcpServer(
           snapshot_,
           aof_
       ) {
+
+    database_.setMaxMemory(
+        config_.max_memory_bytes
+    );
+
     if (
         aof_.existsAndNotEmpty()
     ) {

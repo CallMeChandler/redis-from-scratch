@@ -70,6 +70,7 @@ CommandHandler::createCommandRegistry() {
             "SET",
             {
                 &CommandHandler::executeSet,
+                true,
                 true
             }
         },
@@ -77,7 +78,8 @@ CommandHandler::createCommandRegistry() {
             "GET",
             {
                 &CommandHandler::executeGet,
-                false
+                false,
+                true
             }
         },
         {
@@ -98,6 +100,7 @@ CommandHandler::createCommandRegistry() {
             "HSET",
             {
                 &CommandHandler::executeHSet,
+                true,
                 true
             }
         },
@@ -105,13 +108,15 @@ CommandHandler::createCommandRegistry() {
             "HGET",
             {
                 &CommandHandler::executeHGet,
-                false
+                false,
+                true
             }
         },
         {
             "LPUSH",
             {
                 &CommandHandler::executeLPush,
+                true,
                 true
             }
         },
@@ -119,6 +124,7 @@ CommandHandler::createCommandRegistry() {
             "RPUSH",
             {
                 &CommandHandler::executeRPush,
+                true,
                 true
             }
         },
@@ -126,6 +132,7 @@ CommandHandler::createCommandRegistry() {
             "LPOP",
             {
                 &CommandHandler::executeLPop,
+                true,
                 true
             }
         },
@@ -133,6 +140,7 @@ CommandHandler::createCommandRegistry() {
             "RPOP",
             {
                 &CommandHandler::executeRPop,
+                true,
                 true
             }
         },
@@ -140,20 +148,23 @@ CommandHandler::createCommandRegistry() {
             "LRANGE",
             {
                 &CommandHandler::executeLRange,
-                false
+                false,
+                true
             }
         },
         {
             "LLEN",
             {
                 &CommandHandler::executeLLen,
-                false
+                false,
+                true
             }
         },
         {
             "SADD",
             {
                 &CommandHandler::executeSAdd,
+                true,
                 true
             }
         },
@@ -161,6 +172,7 @@ CommandHandler::createCommandRegistry() {
             "SREM",
             {
                 &CommandHandler::executeSRem,
+                true,
                 true
             }
         },
@@ -168,20 +180,23 @@ CommandHandler::createCommandRegistry() {
             "SISMEMBER",
             {
                 &CommandHandler::executeSIsMember,
-                false
+                false,
+                true
             }
         },
         {
             "SMEMBERS",
             {
                 &CommandHandler::executeSMembers,
-                false
+                false,
+                true
             }
         },
         {
             "ZADD",
             {
                 &CommandHandler::executeZAdd,
+                true,
                 true
             }
         },
@@ -189,20 +204,23 @@ CommandHandler::createCommandRegistry() {
             "ZSCORE",
             {
                 &CommandHandler::executeZScore,
-                false
+                false,
+                true
             }
         },
         {
             "ZRANGE",
             {
                 &CommandHandler::executeZRange,
-                false
+                false,
+                true
             }
         },
         {
             "EXPIRE",
             {
                 &CommandHandler::executeExpire,
+                true,
                 true
             }
         },
@@ -210,7 +228,8 @@ CommandHandler::createCommandRegistry() {
             "TTL",
             {
                 &CommandHandler::executeTTL,
-                false
+                false,
+                true
             }
         },
         {
@@ -540,6 +559,20 @@ std::string CommandHandler::executeImmediate(
             arguments
         );
 
+    const bool success =
+        !response.empty() &&
+        response.front()!='-';
+
+    if (
+        success &&
+        definition.touches_key &&
+        arguments.size() > 1
+    ) {
+        database_.touchKey(
+            arguments[1]
+        );
+    }
+
     if (
         append_to_aof &&
         definition.writes_data &&
@@ -554,6 +587,39 @@ std::string CommandHandler::executeImmediate(
             return encodeError(
                 "ERR failed to append command to AOF"
             );
+        }
+    }
+
+    if (
+    definition.writes_data &&
+    success
+) {
+    const std::vector<std::string>
+        evicted_keys =
+            database_
+                .evictToMemoryLimit();
+
+    if (append_to_aof) {
+            for (
+                const std::string& key :
+                evicted_keys
+            ) {
+                const std::vector<std::string>
+                    delete_command{
+                        "DEL",
+                        key
+                    };
+
+                if (
+                    !aof_.append(
+                        delete_command
+                    )
+                ) {
+                    return encodeError(
+                        "ERR failed to persist memory eviction"
+                    );
+                }
+            }
         }
     }
 

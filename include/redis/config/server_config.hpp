@@ -29,6 +29,8 @@ struct ServerConfig {
     std::size_t expiration_batch_size =
         64;
 
+    std::size_t max_memory_bytes = 0;
+
     bool save_on_shutdown =
         true;
 

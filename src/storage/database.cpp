@@ -5,6 +5,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <limits>
+#include <optional>
 
 namespace redis::storage {
 
@@ -1036,6 +1038,7 @@ bool Database::expire(
 
     if (seconds <= 0) {
         values_.erase(key);
+        last_access_.erase(key);
         markKeyModified(key);
         removeExpiration(key);
         return true;
@@ -1088,6 +1091,7 @@ long long Database::ttl(
 
     if (remaining < 0) {
         values_.erase(key);
+        last_access_.erase(key);
         expirations_.erase(
             expiration_iterator
         );
@@ -1130,6 +1134,7 @@ std::size_t Database::activeExpireCycle(
                 iterator->first;
 
             values_.erase(key);
+            last_access_.erase(key);
 
             markKeyModified(key);
 
@@ -1170,6 +1175,7 @@ bool Database::removeIfExpired(
     }
 
     values_.erase(key);
+    last_access_.erase(key);
 
     markKeyModified(key);
 
@@ -1227,10 +1233,14 @@ void Database::restoreValue(
     std::string key,
     RedisValue value
 ) {
+
+    touchKey(key);
+    
     values_.insert_or_assign(
         std::move(key),
         std::move(value)
     );
+    
 }
 
 std::size_t Database::estimatedMemoryUsage() {
@@ -1307,6 +1317,132 @@ std::size_t Database::estimatedMemoryUsage(
     }
 
     return total;
+}
+
+void Database::setMaxMemory(
+    std::size_t bytes
+) {
+    max_memory_bytes_ =
+        bytes;
+}
+
+std::size_t Database::maxMemory() const noexcept {
+    return max_memory_bytes_;
+}
+
+void Database::touchKey(
+    const std::string& key
+) {
+    removeIfExpired(
+        key
+    );
+
+    if (
+        values_.find(key) ==
+        values_.end()
+    ) {
+        return;
+    }
+
+    ++access_clock_;
+
+    last_access_[key]=
+        access_clock_;
+}
+
+std::optional<std::string>
+Database::evictLeastRecentlyUsed() {
+    if (values_.empty()) {
+        return std::nullopt;
+    }
+
+    auto candidate =
+        values_.begin();
+
+    std::uint64_t oldest_access =
+        std::numeric_limits<
+            std::uint64_t
+        >::max();
+
+    for (
+        auto iterator =
+            values_.begin();
+        iterator != values_.end();
+        ++iterator
+    ) {
+        const auto access_iterator =
+            last_access_.find(
+                iterator->first
+            );
+
+        const std::uint64_t access =
+            access_iterator ==
+                    last_access_.end()
+                ? 0
+                : access_iterator->second;
+
+        if (
+            access <
+            oldest_access
+        ) {
+            oldest_access =
+                access;
+
+            candidate =
+                iterator;
+        }
+    }
+
+    const std::string key =
+        candidate->first;
+
+    values_.erase(
+        candidate
+    );
+
+    expirations_.erase(
+        key
+    );
+
+    last_access_.erase(
+        key
+    );
+
+    markKeyModified(
+        key
+    );
+
+    return key;
+}
+
+std::vector<std::string>
+Database::evictToMemoryLimit() {
+    std::vector<std::string> evicted_keys;
+
+    if (
+        max_memory_bytes_ == 0
+    ) {
+        return evicted_keys;
+    }
+
+    while (
+        estimatedMemoryUsage() >
+        max_memory_bytes_
+    ) {
+        const std::optional<std::string>
+            evicted =
+                evictLeastRecentlyUsed();
+
+        if (!evicted.has_value()) {
+            break;
+        }
+
+        evicted_keys.push_back(
+            *evicted
+        );
+    }
+
+    return evicted_keys;
 }
 
 }  // namespace redis::storage9

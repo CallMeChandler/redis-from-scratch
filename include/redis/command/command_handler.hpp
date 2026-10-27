@@ -9,6 +9,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <functional>
 
 namespace redis::command {
 
@@ -36,6 +37,17 @@ public:
         const protocol::RespValue& value,
         std::vector<std::string>& arguments,
         std::string& command
+    );
+
+    using WriteObserver =
+        std::function<
+            void(
+                const std::vector<std::string>&
+            )
+        >;
+
+    void setWriteObserver(
+        WriteObserver observer
     );
 
 private:
@@ -295,6 +307,8 @@ private:
     persistence::AppendOnlyFile& aof_;
 
     CommandRegistry command_registry_;
+
+    WriteObserver write_observer_;
 };
 
 }  // namespace redis::command

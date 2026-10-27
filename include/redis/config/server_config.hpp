@@ -9,6 +9,15 @@ namespace redis::config {
 struct ServerConfig {
     std::uint16_t port = 6379;
 
+    std::string replica_of_host;
+
+    std::uint16_t replica_of_port = 0;
+    
+    [[nodiscard]]
+    bool isReplica() const noexcept {
+        return !replica_of_host.empty();
+    }
+
     std::string bind_address =
         "0.0.0.0";
 

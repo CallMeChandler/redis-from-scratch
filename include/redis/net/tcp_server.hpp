@@ -8,6 +8,7 @@
 #include "redis/protocol/resp_parser.hpp"
 #include "redis/storage/database.hpp"
 #include "redis/pubsub/pubsub_manager.hpp"
+#include "redis/replication/replication_manager.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -98,6 +99,29 @@ private:
         const std::string& command
     );
 
+    bool handleReplicationCommand(
+        Connection& connection,
+        const std::vector<std::string>& arguments,
+        const std::string& command
+    );
+
+    void propagateReplicationWrite(
+        const std::vector<std::string>& arguments
+    );
+
+    void connectToPrimary();
+
+    void handlePrimaryEvent(
+        std::uint32_t events
+    );
+
+    bool processReplicationInput();
+
+    [[nodiscard]]
+    bool isReplicaWriteForbidden(
+        const std::string& command
+    ) const;
+
     config::ServerConfig config_;
 
     int server_fd_;
@@ -122,6 +146,14 @@ private:
     pubsub::PubSubManager pubsub_manager_;
 
     command::CommandHandler command_handler_;
+
+    replication::ReplicationManager replication_manager_;
+
+    int primary_fd_;
+
+    std::string replication_input_buffer_;
+
+    command::TransactionState replication_transaction_;
 };
 
 }  // namespace redis::net

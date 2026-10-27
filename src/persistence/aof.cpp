@@ -429,6 +429,18 @@ bool AppendOnlyFile::rewrite(
     return true;
 }
 
+bool AppendOnlyFile::reset(){
+    std::ofstream output(
+        path_,
+        std::ios::binary|
+        std::ios::trunc
+    );
+
+    return static_cast<bool>(
+        output
+    );
+}
+
 std::string AppendOnlyFile::encodeCommand(
     const std::vector<std::string>& arguments
 ) {

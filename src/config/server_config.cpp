@@ -162,6 +162,47 @@ ServerConfig ServerConfig::loadFromFile(
 
         stream >> key >> value;
 
+        if (key=="replicaof"){
+            std::string port_text;
+            std::string extra_value;
+
+            if (
+                value.empty() ||
+                !(stream>>port_text) ||
+                (stream>>extra_value)
+            ) {
+                throw std::runtime_error(
+                    "invalid replicaof configuration on line " +
+                    std::to_string(line_number)
+                );
+            }
+
+            const auto parsed_port =
+                parseUnsigned(
+                    port_text,
+                    "replicaof",
+                    line_number
+                );
+
+            if (
+                parsed_port==0||
+                parsed_port>65535
+            ) {
+                throw std::runtime_error(
+                    "invalid replicaof port"
+                );
+            }
+
+            config.replica_of_host=value;
+
+            config.replica_of_port=
+                static_cast<std::uint16_t>(
+                    parsed_port
+                );
+
+            continue;
+        }
+
         if (
             key.empty() ||
             value.empty()

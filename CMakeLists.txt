@@ -22,6 +22,7 @@ add_executable(
     src/storage/database.cpp
     src/config/server_config.cpp
     src/pubsub/pubsub_manager.cpp
+    src/replication/replication_manager.cpp
 )
 
 target_include_directories(

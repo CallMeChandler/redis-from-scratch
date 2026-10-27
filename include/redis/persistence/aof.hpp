@@ -34,6 +34,9 @@ public:
         storage::Database& database
     );
 
+    [[nodiscard]]
+    bool reset();
+
 private:
     [[nodiscard]]
     static std::string encodeCommand(

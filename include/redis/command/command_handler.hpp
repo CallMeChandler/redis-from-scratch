@@ -242,6 +242,11 @@ private:
     );
 
     [[nodiscard]]
+    std::string executeExpireAt(
+        const std::vector<std::string>& arguments
+    );
+
+    [[nodiscard]]
     std::string executeTTL(
         const std::vector<std::string>& arguments
     );

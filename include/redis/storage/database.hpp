@@ -196,6 +196,11 @@ public:
         long long seconds
     );
 
+    bool expireAt(
+        const std::string& key,
+        std::int64_t unix_seconds
+    );
+
     [[nodiscard]]
     long long ttl(
         const std::string& key

@@ -16,6 +16,8 @@
 
 #include <utility>
 
+#include <chrono>
+
 namespace redis::command {
 
 CommandHandler::CommandHandler(
@@ -436,6 +438,15 @@ CommandHandler::createCommandRegistry() {
 
             }
 
+        },
+
+        {
+            "EXPIREAT",
+            {
+                &CommandHandler::executeExpireAt,
+                true,
+                true
+            }
         },
 
         {
@@ -971,6 +982,43 @@ std::string CommandHandler::executeImmediate(
         !response.empty() &&
         response.front() != '-';
 
+    std::vector<std::string>
+        persisted_arguments =
+            arguments;
+
+    if (
+        success &&
+        command == "EXPIRE" &&
+        arguments.size() == 3
+    ) {
+        long long seconds = 0;
+
+        if (
+            parseInteger(
+                arguments[2],
+                seconds
+            )
+        ) {
+            const auto now =
+                std::chrono::system_clock::now();
+
+            const long long unix_now =
+                std::chrono::duration_cast<
+                    std::chrono::seconds
+                >(
+                    now.time_since_epoch()
+                ).count();
+
+            persisted_arguments = {
+                "EXPIREAT",
+                arguments[1],
+                std::to_string(
+                    unix_now + seconds
+                )
+            };
+        }
+    }
+
     if (
         success &&
         definition.touches_key &&
@@ -988,7 +1036,7 @@ std::string CommandHandler::executeImmediate(
     ) {
         if (
             !aof_.append(
-                arguments
+                persisted_arguments
             )
         ) {
             return encodeError(
@@ -1004,7 +1052,7 @@ std::string CommandHandler::executeImmediate(
         write_observer_
     ) {
         write_observer_(
-            arguments
+            persisted_arguments
         );
     }
 
@@ -2328,6 +2376,41 @@ std::string CommandHandler::executeExpire(
 
     );
 
+}
+
+std::string CommandHandler::executeExpireAt(
+    const std::vector<std::string>& arguments
+) {
+    if (arguments.size() != 3) {
+        return encodeError(
+            "ERR wrong number of arguments for 'expireat' command"
+        );
+    }
+
+    long long unix_seconds = 0;
+
+    if (
+        !parseInteger(
+            arguments[2],
+            unix_seconds
+        )
+    ) {
+        return encodeError(
+            "ERR value is not an integer or out of range"
+        );
+    }
+
+    const bool success =
+        database_.expireAt(
+            arguments[1],
+            static_cast<std::int64_t>(
+                unix_seconds
+            )
+        );
+
+    return encodeInteger(
+        success ? 1 : 0
+    );
 }
 
 std::string CommandHandler::executeTTL(

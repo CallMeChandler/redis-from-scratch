@@ -1057,6 +1057,59 @@ bool Database::expire(
     return true;
 }
 
+bool Database::expireAt(
+    const std::string& key,
+    std::int64_t unix_seconds
+) {
+    removeIfExpired(key);
+
+    if (
+        values_.find(key) ==
+        values_.end()
+    ) {
+        return false;
+    }
+
+    const auto system_now =
+        std::chrono::system_clock::now();
+
+    const std::int64_t current_unix_seconds =
+        std::chrono::duration_cast<
+            std::chrono::seconds
+        >(
+            system_now.time_since_epoch()
+        ).count();
+
+    if (
+        unix_seconds<=
+        current_unix_seconds
+    ) {
+        values_.erase(key);
+        expirations_.erase(key);
+        last_access_.erase(key);
+
+        markKeyModified(key);
+
+        return true;
+    }
+
+    const std::int64_t remaining_seconds=
+        unix_seconds-
+        current_unix_seconds;
+
+    expirations_.insert_or_assign(
+        key,
+        Clock::now()+
+            std::chrono::seconds(
+                remaining_seconds
+            )
+    );
+
+    markKeyModified(key);
+
+    return true;
+}
+
 long long Database::ttl(
     const std::string& key
 ) {
@@ -1227,20 +1280,21 @@ void Database::clear() {
     values_.clear();
     expirations_.clear();
     key_versions_.clear();
+    last_access_.clear();
+
+    access_clock_ = 0;
 }
 
 void Database::restoreValue(
     std::string key,
     RedisValue value
 ) {
-
-    touchKey(key);
-    
     values_.insert_or_assign(
-        std::move(key),
+        key,
         std::move(value)
     );
-    
+
+    touchKey(key);
 }
 
 std::size_t Database::estimatedMemoryUsage() {

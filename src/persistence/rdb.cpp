@@ -8,6 +8,8 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <filesystem>
+#include <system_error>
 
 namespace redis::persistence {
 
@@ -609,13 +611,25 @@ bool RdbSnapshot::save(
         );
     }
 
+    const std::string temporary_path =
+        path_ + ".tmp";
+
     std::ofstream output(
-        path_,
+        temporary_path,
         std::ios::binary |
         std::ios::trunc
     );
 
     if (!output) {
+        output.close();
+
+        std::error_code remove_error;
+
+        std::filesystem::remove(
+            temporary_path,
+            remove_error
+        );
+
         return false;
     }
 
@@ -640,6 +654,15 @@ bool RdbSnapshot::save(
     );
 
     if (!output) {
+        output.close();
+
+        std::error_code remove_error;
+
+        std::filesystem::remove(
+            temporary_path,
+            remove_error
+        );
+
         return false;
     }
 
@@ -873,8 +896,53 @@ bool RdbSnapshot::save(
         }
 
         if (!output) {
+            output.close();
+
+            std::error_code remove_error;
+
+            std::filesystem::remove(
+                temporary_path,
+                remove_error
+            );
+
             return false;
         }
+    }
+
+    output.flush();
+
+    if (!output) {
+        output.close();
+
+        std::error_code remove_error;
+
+        std::filesystem::remove(
+            temporary_path,
+            remove_error
+        );
+
+        return false;
+    }
+
+    output.close();
+
+    std::error_code rename_error;
+
+    std::filesystem::rename(
+        temporary_path,
+        path_,
+        rename_error
+    );
+
+    if (rename_error) {
+        std::error_code remove_error;
+
+        std::filesystem::remove(
+            temporary_path,
+            remove_error
+        );
+
+        return false;
     }
 
     return true;

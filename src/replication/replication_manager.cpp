@@ -4,6 +4,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <chrono>
 
 namespace redis::replication {
 
@@ -42,7 +43,8 @@ bool ReplicationManager::isWriteCommand(
         command == "SADD" ||
         command == "SREM" ||
         command == "ZADD" ||
-        command == "EXPIRE";
+        command == "EXPIRE"||
+        command == "EXPIREAT";
 }
 
 std::string ReplicationManager::encodeCommand(
@@ -244,13 +246,25 @@ std::string ReplicationManager::buildFullSync(
          * Restore remaining TTL after restoring
          * the underlying value.
          */
-        if (ttl >= 0) {
-            output +=
-                encodeCommand({
-                    "EXPIRE",
-                    key,
-                    std::to_string(ttl)
-                });
+    if (ttl >= 0) {
+        const auto now =
+            std::chrono::system_clock::now();
+
+        const long long unix_now =
+            std::chrono::duration_cast<
+                std::chrono::seconds
+            >(
+                now.time_since_epoch()
+            ).count();
+
+        output +=
+            encodeCommand({
+                "EXPIREAT",
+                key,
+                std::to_string(
+                    unix_now + ttl
+                )
+            });
         }
     }
 

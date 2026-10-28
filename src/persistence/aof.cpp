@@ -12,6 +12,7 @@
 #include <vector>
 #include <iomanip>
 #include <sstream>
+#include <chrono>
 
 namespace redis::persistence {
 
@@ -94,7 +95,19 @@ bool AppendOnlyFile::load(
             result.status ==
             protocol::ParseStatus::Incomplete
         ) {
-            return false;
+            std::error_code resize_error;
+
+            std::filesystem::resize_file(
+                path_,
+                offset,
+                resize_error
+            );
+
+            if (resize_error) {
+                return false;
+            }
+
+            return true;
         }
 
         if (
@@ -356,11 +369,23 @@ bool AppendOnlyFile::rewrite(
         //ttl==-1 means permanent
         //ttl>=0 means expiration exists
 
-        if (ttl>=0){
+        if (ttl >= 0) {
+            const auto now =
+                std::chrono::system_clock::now();
+
+            const long long unix_now =
+                std::chrono::duration_cast<
+                    std::chrono::seconds
+                >(
+                    now.time_since_epoch()
+                ).count();
+
             const std::vector<std::string> expire_command{
-                "EXPIRE",
+                "EXPIREAT",
                 key,
-                std::to_string(ttl)
+                std::to_string(
+                    unix_now + ttl
+                )
             };
 
             const std::string encoded =

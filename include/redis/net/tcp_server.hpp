@@ -15,6 +15,7 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
+#include <chrono>
 
 namespace redis::net {
 
@@ -122,6 +123,17 @@ private:
         const std::string& command
     ) const;
 
+    bool handleInfoCommand(
+        Connection& connection,
+        const std::vector<std::string>& arguments,
+        const std::string& command
+    );
+
+    [[nodiscard]]
+    std::string buildInfoPayload(
+        const std::string& requested_section
+    );
+
     config::ServerConfig config_;
 
     int server_fd_;
@@ -154,6 +166,19 @@ private:
     std::string replication_input_buffer_;
 
     command::TransactionState replication_transaction_;
+
+    std::chrono::steady_clock::time_point
+    started_at_;
+
+    std::uint64_t total_connections_received_ = 0;
+
+    std::uint64_t rejected_connections_ = 0;
+
+    std::uint64_t total_commands_processed_ = 0;
+
+    std::uint64_t total_net_input_bytes_ = 0;
+
+    std::uint64_t total_net_output_bytes_ = 0;
 };
 
 }  // namespace redis::net

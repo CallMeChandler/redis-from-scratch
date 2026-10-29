@@ -1,43 +1,28 @@
 #include "redis/net/tcp_server.hpp"
 
 #include <arpa/inet.h>
-
 #include <array>
-
 #include <cerrno>
-
 #include <cstddef>
-
 #include <cstdint>
-
 #include <cstring>
-
 #include <iostream>
-
 #include <memory>
-
 #include <stdexcept>
-
 #include <string>
-
 #include <string_view>
-
 #include <vector>
 #include <variant>
-
 #include <utility>
-
 #include <signal.h>
-
 #include <sys/epoll.h>
-
 #include <sys/signalfd.h>
-
 #include <sys/socket.h>
-
 #include <unistd.h>
-
 #include <fcntl.h>
+#include <algorithm>
+#include <cctype>
+#include <sstream>
 
 namespace redis::net {
 
@@ -187,6 +172,7 @@ TcpServer::~TcpServer() {
 }
 
 void TcpServer::start() {
+    started_at_= std::chrono::steady_clock::now();
     createSocket();
     configureSocket();
     bindSocket();
@@ -823,6 +809,8 @@ void TcpServer::handleNewConnection() {
 
                 << std::endl;
 
+            ++rejected_connections_;
+
             ::close(client_fd);
 
             continue;
@@ -882,6 +870,8 @@ void TcpServer::handleNewConnection() {
             std::move(connection)
 
         );
+
+        ++total_connections_received_;
 
         try {
 
@@ -1128,15 +1118,15 @@ bool TcpServer::readFromClient(
         if (bytes_read > 0) {
 
             const std::size_t bytes_received =
-
                 static_cast<
-
                     std::size_t
-
                 >(
-
                     bytes_read
+                );
 
+            total_net_input_bytes_+=
+                static_cast<std::uint64_t>(
+                    bytes_read
                 );
 
             connection.appendInput(
@@ -1306,6 +1296,7 @@ bool TcpServer::processInput(
             );
 
         if (decoded) {
+            ++total_commands_processed_;
             if (
                 handleReplicationCommand(
                     connection,
@@ -1336,6 +1327,57 @@ bool TcpServer::processInput(
                 );
 
                 continue;
+            }
+            if (
+                command::CommandHandler::decodeCommand(
+                    result.value,
+                    arguments,
+                    command
+                )
+            ) {
+                ++total_commands_processed_;
+
+                if (
+                    handleReplicationCommand(
+                        connection,
+                        arguments,
+                        command
+                    )
+                ) {
+                    continue;
+                }
+
+                if (
+                    isReplicaWriteForbidden(
+                        command
+                    )
+                ) {
+                    connection.appendOutput(
+                        "-READONLY You can't write against a read only replica.\r\n"
+                    );
+
+                    continue;
+                }
+
+                if (
+                    handlePubSubCommand(
+                        connection,
+                        arguments,
+                        command
+                    )
+                ) {
+                    continue;
+                }
+
+                if (
+                    handleInfoCommand(
+                        connection,
+                        arguments,
+                        command
+                    )
+                ) {
+                    continue;
+                }
             }
         }
 
@@ -2097,6 +2139,11 @@ void TcpServer::handlePrimaryEvent(
                 )
             );
 
+            total_net_input_bytes_ +=
+                static_cast<std::uint64_t>(
+                    bytes
+                );
+
             continue;
         }
 
@@ -2465,6 +2512,238 @@ void TcpServer::connectToPrimary() {
 
         << std::endl;
 
+}
+
+bool TcpServer::handleInfoCommand(
+    Connection& connection,
+    const std::vector<std::string>& arguments,
+    const std::string& command
+) {
+    if (command != "INFO") {
+        return false;
+    }
+
+    if (arguments.size() > 2) {
+        connection.appendOutput(
+            "-ERR wrong number of arguments for 'info' command\r\n"
+        );
+
+        return true;
+    }
+
+    std::string section =
+        arguments.size() == 2
+            ? arguments[1]
+            : "all";
+
+    std::transform(
+        section.begin(),
+        section.end(),
+        section.begin(),
+        [](
+            unsigned char character
+        ) {
+            return static_cast<char>(
+                std::tolower(
+                    character
+                )
+            );
+        }
+    );
+
+    const std::string payload =
+        buildInfoPayload(
+            section
+        );
+
+    if (
+        payload.empty() &&
+        section != "all"
+    ) {
+        connection.appendOutput(
+            "-ERR unknown INFO section\r\n"
+        );
+
+        return true;
+    }
+
+    connection.appendOutput(
+        "$" +
+        std::to_string(
+            payload.size()
+        ) +
+        "\r\n" +
+        payload +
+        "\r\n"
+    );
+
+    return true;
+}
+
+std::string TcpServer::buildInfoPayload(
+    const std::string& requested_section
+) {
+    const bool all =
+        requested_section == "all";
+
+    std::ostringstream output;
+
+    if (
+        all ||
+        requested_section == "server"
+    ) {
+        const auto uptime =
+            std::chrono::duration_cast<
+                std::chrono::seconds
+            >(
+                std::chrono::steady_clock::now() -
+                started_at_
+            ).count();
+
+        output
+            << "# Server\r\n"
+            << "redis_version:redis-from-scratch\r\n"
+            << "uptime_in_seconds:"
+            << uptime
+            << "\r\n"
+            << "tcp_port:"
+            << config_.port
+            << "\r\n"
+            << "\r\n";
+    }
+
+    if (
+        all ||
+        requested_section == "clients"
+    ) {
+        const std::size_t replica_connections =
+            replication_manager_
+                .replicas()
+                .size();
+
+        std::size_t connected_clients =
+            connections_.size();
+
+        if (
+            connected_clients >=
+            replica_connections
+        ) {
+            connected_clients -=
+                replica_connections;
+        }
+
+        output
+            << "# Clients\r\n"
+            << "connected_clients:"
+            << connected_clients
+            << "\r\n"
+            << "total_connections_received:"
+            << total_connections_received_
+            << "\r\n"
+            << "rejected_connections:"
+            << rejected_connections_
+            << "\r\n"
+            << "\r\n";
+    }
+
+    if (
+        all ||
+        requested_section == "memory"
+    ) {
+        output
+            << "# Memory\r\n"
+            << "used_memory:"
+            << database_
+                   .estimatedMemoryUsage()
+            << "\r\n"
+            << "maxmemory:"
+            << database_
+                   .maxMemory()
+            << "\r\n"
+            << "\r\n";
+    }
+
+    if (
+        all ||
+        requested_section == "stats"
+    ) {
+        output
+            << "# Stats\r\n"
+            << "total_commands_processed:"
+            << total_commands_processed_
+            << "\r\n"
+            << "total_net_input_bytes:"
+            << total_net_input_bytes_
+            << "\r\n"
+            << "total_net_output_bytes:"
+            << total_net_output_bytes_
+            << "\r\n"
+            << "expired_keys:"
+            << database_
+                   .expiredKeysCount()
+            << "\r\n"
+            << "evicted_keys:"
+            << database_
+                   .evictedKeysCount()
+            << "\r\n"
+            << "\r\n";
+    }
+
+    if (
+        all ||
+        requested_section ==
+            "replication"
+    ) {
+        output
+            << "# Replication\r\n";
+
+        if (config_.isReplica()) {
+            output
+                << "role:replica\r\n"
+                << "primary_host:"
+                << config_.replica_of_host
+                << "\r\n"
+                << "primary_port:"
+                << config_.replica_of_port
+                << "\r\n"
+                << "primary_link_status:"
+                << (
+                       primary_fd_ !=
+                               kInvalidFileDescriptor
+                           ? "up"
+                           : "down"
+                   )
+                << "\r\n";
+        } else {
+            output
+                << "role:primary\r\n"
+                << "connected_replicas:"
+                << replication_manager_
+                       .replicas()
+                       .size()
+                << "\r\n";
+        }
+
+        output << "\r\n";
+    }
+
+    if (
+        all ||
+        requested_section ==
+            "keyspace"
+    ) {
+        output
+            << "# Keyspace\r\n"
+            << "db0:keys="
+            << database_.size()
+            << ",expires="
+            << database_
+                   .expirationCount()
+            << "\r\n"
+            << "\r\n";
+    }
+
+    return output.str();
 }
 
 }  // namespace redis::net

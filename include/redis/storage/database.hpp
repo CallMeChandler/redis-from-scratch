@@ -256,6 +256,15 @@ public:
     std::vector<std::string>
     evictToMemoryLimit();
 
+    [[nodiscard]]
+    std::uint64_t expiredKeysCount() const noexcept;
+
+    [[nodiscard]]
+    std::uint64_t evictedKeysCount() const noexcept;
+
+    [[nodiscard]]
+    std::size_t expirationCount() const noexcept;
+
 private:
     using Clock =
         std::chrono::steady_clock;
@@ -295,6 +304,10 @@ private:
     std::uint64_t access_clock_ = 0;
 
     std::size_t max_memory_bytes_ = 0;
+
+    std::uint64_t expired_keys_count_ = 0;
+
+    std::uint64_t evicted_keys_count_ = 0;
 };
 
 }  // namespace redis::storage

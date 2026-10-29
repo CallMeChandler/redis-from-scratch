@@ -1041,6 +1041,7 @@ bool Database::expire(
         last_access_.erase(key);
         markKeyModified(key);
         removeExpiration(key);
+        ++expired_keys_count_;
         return true;
     }
 
@@ -1089,6 +1090,8 @@ bool Database::expireAt(
         last_access_.erase(key);
 
         markKeyModified(key);
+
+        ++expired_keys_count_;
 
         return true;
     }
@@ -1197,6 +1200,7 @@ std::size_t Database::activeExpireCycle(
                 );
 
             ++removed;
+            ++expired_keys_count_;
 
             continue;
     }
@@ -1235,6 +1239,8 @@ bool Database::removeIfExpired(
     expirations_.erase(
         expiration_iterator
     );
+
+    ++expired_keys_count_;
 
     return true;
 }
@@ -1466,6 +1472,8 @@ Database::evictLeastRecentlyUsed() {
         key
     );
 
+    ++evicted_keys_count_;
+
     return key;
 }
 
@@ -1497,6 +1505,21 @@ Database::evictToMemoryLimit() {
     }
 
     return evicted_keys;
+}
+
+std::uint64_t
+Database::expiredKeysCount() const noexcept {
+    return expired_keys_count_;
+}
+
+std::uint64_t
+Database::evictedKeysCount() const noexcept {
+    return evicted_keys_count_;
+}
+
+std::size_t
+Database::expirationCount() const noexcept {
+    return expirations_.size();
 }
 
 }  // namespace redis::storage9

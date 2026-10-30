@@ -1,9 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "rewrites": [
+  "routes": [
     {
-      "source": "/:path*",
-      "destination": "https://chandlerismod--redis-from-scratch.us-east.modal.run/:path*"
+      "src": "/(.*)",
+      "dest": "https://chandlerismod--redis-from-scratch.us-east.modal.run/$1"
     }
   ]
 }

@@ -1,0 +1,66 @@
+# Local stack: C++ primary + replica + dashboard.
+#
+#   docker compose up --build
+#   open http://localhost:3000
+#
+# The replica's `replicaof` needs an IPv4 literal, so the primary gets a fixed
+# address on a dedicated network. The dashboard (Node) resolves hostnames normally.
+
+services:
+  redis-primary:
+    build: .
+    command: ["redis-server", "/etc/redis-from-scratch/primary.conf"]
+    volumes:
+      - primary-data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      rfs:
+        ipv4_address: 172.28.0.10
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6379"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+    restart: unless-stopped
+
+  redis-replica:
+    build: .
+    command: ["redis-server", "/etc/redis-from-scratch/replica.conf"]
+    volumes:
+      - replica-data:/data
+    ports:
+      - "6380:6380"
+    networks:
+      rfs:
+        ipv4_address: 172.28.0.11
+    depends_on:
+      redis-primary:
+        condition: service_healthy
+    restart: unless-stopped
+
+  dashboard:
+    build: ./dashboard
+    environment:
+      REDIS_HOST: redis-primary
+      REDIS_PORT: "6379"
+      REPLICA_HOST: redis-replica
+      REPLICA_PORT: "6380"
+      PORT: "3000"
+    ports:
+      - "3000:3000"
+    networks:
+      - rfs
+    depends_on:
+      - redis-primary
+    restart: unless-stopped
+
+networks:
+  rfs:
+    ipam:
+      config:
+        - subnet: 172.28.0.0/24
+
+volumes:
+  primary-data:
+  replica-data:

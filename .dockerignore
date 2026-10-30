@@ -1,0 +1,10 @@
+.git
+build
+build-*
+cmake-build-*
+benchmark_results
+*.rdb
+*.aof
+dashboard/node_modules
+dashboard/.next
+dashboard/dist

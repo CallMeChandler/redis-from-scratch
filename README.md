@@ -344,6 +344,18 @@ Run the integration smoke test while the server is running:
 
 The RESP parser fuzz target uses deterministic randomized input and can be compiled with AddressSanitizer and UndefinedBehaviorSanitizer.
 
+## Dashboard
+
+`dashboard/` contains a Next.js playground for every implemented feature: data types, TTL, transactions, Pub/Sub, LRU eviction, replication, persistence, INFO metrics, and a raw RESP terminal. Its Node backend speaks RESP2 to the server over plain TCP with a hand-written TypeScript client, so it also exercises the server's wire compatibility.
+
+```bash
+./build/redis-server examples/primary.conf
+./build/redis-server examples/replica.conf
+cd dashboard && npm install && npm run dev    # http://localhost:3000
+```
+
+`docker compose up --build` runs primary, replica, and dashboard together. See [dashboard/README.md](dashboard/README.md) for architecture, environment variables, and Railway deployment.
+
 ## Benchmarking
 
 Build an optimized version first:

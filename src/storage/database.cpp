@@ -1203,7 +1203,7 @@ std::size_t Database::activeExpireCycle(
             ++expired_keys_count_;
 
             continue;
-    }
+        }
 
         ++iterator;
     }
@@ -1522,4 +1522,4 @@ Database::expirationCount() const noexcept {
     return expirations_.size();
 }
 
-}  // namespace redis::storage9
+}  // namespace redis::storage

@@ -33,8 +33,15 @@ constexpr int kInvalidFileDescriptor = -1;
 constexpr int kMaxEvents = 64;
 
 constexpr std::size_t kReadBufferSize =
-
     4096;
+
+constexpr std::size_t
+    kMaxClientInputBufferSize =
+        16 * 1024 * 1024;
+
+constexpr std::size_t
+    kMaxReplicationInputBufferSize =
+        32 * 1024 * 1024;
 
 std::runtime_error makeSystemError(
 
@@ -1084,9 +1091,7 @@ void TcpServer::handleClientEvent(
 }
 
 bool TcpServer::readFromClient(
-
     Connection& connection
-
 ) {
 
     char buffer[
@@ -1129,12 +1134,29 @@ bool TcpServer::readFromClient(
                     bytes_read
                 );
 
+            const std::size_t current_size =
+                connection
+                    .inputBuffer()
+                    .size();
+
+            if (
+                current_size >
+                    kMaxClientInputBufferSize ||
+                bytes_received >
+                    kMaxClientInputBufferSize -
+                        current_size
+            ) {
+                std::cerr
+                    << "Client input buffer limit exceeded on fd "
+                    << connection.fd()
+                    << std::endl;
+
+                return false;
+            }
+
             connection.appendInput(
-
                 buffer,
-
                 bytes_received
-
             );
 
             std::cout
@@ -1268,17 +1290,29 @@ bool TcpServer::processInput(
                 << result.error_message
                 << std::endl;
 
-            connection.appendOutput(
-                "-ERR Protocol error\r\n"
-            );
+            /*
+             * A malformed RESP stream means we can no longer
+             * reliably determine frame boundaries.
+             *
+             * Close the client rather than attempting to
+             * continue parsing corrupted input.
+             */
+            return false;
+        }
 
-            connection.consumeInput(
+        if (
+            result.consumed == 0 ||
+            result.consumed >
                 connection
                     .inputBuffer()
                     .size()
-            );
+        ) {
+            std::cerr
+                << "Invalid parser consumption on fd "
+                << connection.fd()
+                << std::endl;
 
-            return true;
+            return false;
         }
 
         connection.consumeInput(
@@ -1297,6 +1331,7 @@ bool TcpServer::processInput(
 
         if (decoded) {
             ++total_commands_processed_;
+
             if (
                 handleReplicationCommand(
                     connection,
@@ -1328,56 +1363,15 @@ bool TcpServer::processInput(
 
                 continue;
             }
+
             if (
-                command::CommandHandler::decodeCommand(
-                    result.value,
+                handleInfoCommand(
+                    connection,
                     arguments,
                     command
                 )
             ) {
-                ++total_commands_processed_;
-
-                if (
-                    handleReplicationCommand(
-                        connection,
-                        arguments,
-                        command
-                    )
-                ) {
-                    continue;
-                }
-
-                if (
-                    isReplicaWriteForbidden(
-                        command
-                    )
-                ) {
-                    connection.appendOutput(
-                        "-READONLY You can't write against a read only replica.\r\n"
-                    );
-
-                    continue;
-                }
-
-                if (
-                    handlePubSubCommand(
-                        connection,
-                        arguments,
-                        command
-                    )
-                ) {
-                    continue;
-                }
-
-                if (
-                    handleInfoCommand(
-                        connection,
-                        arguments,
-                        command
-                    )
-                ) {
-                    continue;
-                }
+                continue;
             }
         }
 
@@ -1390,11 +1384,6 @@ bool TcpServer::processInput(
         connection.appendOutput(
             response
         );
-
-        std::cout
-            << "Executed RESP command on fd "
-            << connection.fd()
-            << std::endl;
     }
 
     return true;
@@ -1431,23 +1420,20 @@ bool TcpServer::writeToClient(
             );
 
         if (bytes_sent > 0) {
-
+            total_net_output_bytes_ +=
+            static_cast<std::uint64_t>(
+                bytes_sent
+            );
+            
             connection.consumeOutput(
-
                 static_cast<
-
                     std::size_t
-
                 >(
-
                     bytes_sent
-
                 )
-
             );
 
             continue;
-
         }
 
         if (
@@ -2132,6 +2118,22 @@ void TcpServer::handlePrimaryEvent(
             );
 
         if (bytes > 0) {
+            const std::size_t bytes_received =
+                static_cast<std::size_t>(
+                    bytes
+                );
+
+            if (
+                replication_input_buffer_.size() >
+                    kMaxReplicationInputBufferSize ||
+                bytes_received >
+                    kMaxReplicationInputBufferSize -
+                        replication_input_buffer_.size()
+            ) {
+                throw std::runtime_error(
+                    "replication input buffer limit exceeded"
+                );
+            }
             replication_input_buffer_.append(
                 buffer,
                 static_cast<std::size_t>(

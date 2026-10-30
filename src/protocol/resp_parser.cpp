@@ -83,14 +83,25 @@ ParseResult RespParser::parse(
 
     return parseValue(
         input,
+        0,
         0
     );
 }
 
 ParseResult RespParser::parseValue(
     std::string_view input,
-    std::size_t offset
+    std::size_t offset,
+    std::size_t depth
 ) const {
+    if (
+        depth >
+        kMaxNestingDepth
+    ) {
+        return makeError(
+            "RESP nesting depth exceeded"
+        );
+    }
+
     if (offset >= input.size()) {
         return makeIncomplete();
     }
@@ -126,7 +137,8 @@ ParseResult RespParser::parseValue(
         case '*':
             return parseArray(
                 input,
-                offset
+                offset,
+                depth
             );
 
         default:
@@ -147,6 +159,16 @@ ParseResult RespParser::parseSimpleString(
         );
 
     if (line_end == kNotFound) {
+        if (
+            input.size() -
+                (offset + 1) >
+            kMaxLineBytes
+        ) {
+            return makeError(
+                "RESP line exceeds maximum size"
+            );
+        }
+
         return makeIncomplete();
     }
 
@@ -178,6 +200,16 @@ ParseResult RespParser::parseError(
         );
 
     if (line_end == kNotFound) {
+        if (
+            input.size() -
+                (offset + 1) >
+            kMaxLineBytes
+        ) {
+            return makeError(
+                "RESP line exceeds maximum size"
+            );
+        }
+
         return makeIncomplete();
     }
 
@@ -209,6 +241,16 @@ ParseResult RespParser::parseInteger(
         );
 
     if (line_end == kNotFound) {
+        if (
+            input.size() -
+                (offset + 1) >
+            kMaxLineBytes
+        ) {
+            return makeError(
+                "RESP line exceeds maximum size"
+            );
+        }
+
         return makeIncomplete();
     }
 
@@ -250,7 +292,27 @@ ParseResult RespParser::parseBulkString(
         );
 
     if (length_end == kNotFound) {
+        if (
+            input.size() -
+                (offset + 1) >
+            kMaxLineBytes
+        ) {
+            return makeError(
+                "RESP line exceeds maximum size"
+            );
+        }
+
         return makeIncomplete();
+    }
+
+    if (
+        length_end -
+            (offset + 1) >
+        kMaxLineBytes
+    ) {
+        return makeError(
+            "RESP line exceeds maximum size"
+        );
     }
 
     const std::string_view length_text =
@@ -284,6 +346,17 @@ ParseResult RespParser::parseBulkString(
     if (length < -1) {
         return makeError(
             "bulk string length cannot be less than -1"
+        );
+    }
+
+    if (
+        length >
+        static_cast<std::int64_t>(
+            kMaxBulkStringBytes
+        )
+    ) {
+        return makeError(
+            "bulk string exceeds maximum size"
         );
     }
 
@@ -331,8 +404,16 @@ ParseResult RespParser::parseBulkString(
         payload_length;
 
     if (
-        input.size() <
-        payload_end + 2
+        payload_end >
+        input.size()
+    ) {
+        return makeIncomplete();
+    }
+
+    if (
+        input.size() -
+            payload_end <
+        2
     ) {
         return makeIncomplete();
     }
@@ -365,7 +446,8 @@ ParseResult RespParser::parseBulkString(
 
 ParseResult RespParser::parseArray(
     std::string_view input,
-    std::size_t offset
+    std::size_t offset,
+    std::size_t depth
 ) const {
     const std::size_t count_end =
         findCrlf(
@@ -374,7 +456,27 @@ ParseResult RespParser::parseArray(
         );
 
     if (count_end == kNotFound) {
+        if (
+            input.size() -
+                (offset + 1) >
+            kMaxLineBytes
+        ) {
+            return makeError(
+                "RESP line exceeds maximum size"
+            );
+        }
+
         return makeIncomplete();
+    }
+
+    if (
+        count_end -
+            (offset + 1) >
+        kMaxLineBytes
+    ) {
+        return makeError(
+            "RESP line exceeds maximum size"
+        );
     }
 
     const std::string_view count_text =
@@ -402,6 +504,15 @@ ParseResult RespParser::parseArray(
         );
     }
 
+    if (
+        count >
+        kMaxArrayElements
+    ) {
+        return makeError(
+            "RESP array has too many elements"
+        );
+    }
+
     RespArray values;
 
     values.reserve(
@@ -421,7 +532,8 @@ ParseResult RespParser::parseArray(
         const ParseResult element_result =
             parseValue(
                 input,
-                current_offset
+                current_offset,
+                depth + 1
             );
 
         if (

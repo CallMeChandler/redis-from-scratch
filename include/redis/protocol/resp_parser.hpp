@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <string>
 #include <string_view>
+#include <cstdint>
 
 namespace redis::protocol {
 
@@ -30,7 +31,8 @@ private:
     [[nodiscard]]
     ParseResult parseValue(
         std::string_view input,
-        std::size_t offset
+        std::size_t offset,
+        std::size_t depth
     ) const;
 
     [[nodiscard]]
@@ -60,7 +62,8 @@ private:
     [[nodiscard]]
     ParseResult parseArray(
         std::string_view input,
-        std::size_t offset
+        std::size_t offset,
+        std::size_t depth
     ) const;
 
     [[nodiscard]]
@@ -68,6 +71,22 @@ private:
         std::string_view input,
         std::size_t offset
     );
+
+    static constexpr std::size_t
+        kMaxBulkStringBytes=
+            8*1024*1024;
+
+    static constexpr std::int64_t
+        kMaxArrayElements=
+            1024;
+
+    static constexpr std::size_t
+        kMaxNestingDepth=
+            32;
+
+    static constexpr std::size_t
+        kMaxLineBytes=
+            64*1024;
 };
 
 }  // namespace redis::protocol

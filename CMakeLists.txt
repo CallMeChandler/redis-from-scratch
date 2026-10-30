@@ -25,16 +25,42 @@ add_executable(
     src/replication/replication_manager.cpp
 )
 
-target_include_directories(
-    redis-server
-    PRIVATE
-    ${PROJECT_SOURCE_DIR}/include
+add_executable(
+    resp-fuzz
+    tests/resp_parser_fuzz.cpp
+    src/protocol/resp_parser.cpp
 )
 
-target_compile_options(
-    redis-server
-    PRIVATE
-    -Wall
-    -Wextra
-    -Wpedantic
+foreach(target redis-server resp-fuzz)
+    target_include_directories(
+        ${target}
+        PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+    )
+
+    target_compile_options(
+        ${target}
+        PRIVATE
+        -Wall
+        -Wextra
+        -Wpedantic
+    )
+endforeach()
+
+if (
+    CMAKE_CXX_COMPILER_ID MATCHES
+    "GNU|Clang"
 )
+    target_compile_options(
+        resp-fuzz
+        PRIVATE
+        -fsanitize=address,undefined
+        -fno-omit-frame-pointer
+    )
+
+    target_link_options(
+        resp-fuzz
+        PRIVATE
+        -fsanitize=address,undefined
+    )
+endif()
